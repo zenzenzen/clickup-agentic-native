@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clickup-agentic-native"
+version = "0.1.0"
+description = "Agentic native ClickUp tooling exposed through the clickup-agent command."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "zenzenzen" }]
+keywords = ["clickup", "agent", "mcp", "llm", "workflow"]
+
+[project.scripts]
+clickup-agent = "clickup_agent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

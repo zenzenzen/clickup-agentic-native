@@ -22,6 +22,75 @@ clickup-agent run <hotkey-or-toolchain>
 clickup-agent doctor
 ```
 
+## Install Your Own Agent
+
+This repo is the starting point for a local ClickUp agent that an LLM client can run as a tool server.
+
+Clone your own copy:
+
+```bash
+git clone https://github.com/zenzenzen/clickup-agentic-native.git
+cd clickup-agentic-native
+```
+
+Create local secrets from the template:
+
+```bash
+cp .env.example .env.local
+chmod 600 .env.local
+```
+
+Then edit `.env.local`:
+
+```bash
+CLICKUP_API_KEY=your_clickup_personal_token
+CLICKUP_WORKSPACE_ID=your_default_workspace_id
+```
+
+Install the Python package:
+
+```bash
+pipx install .
+```
+
+During early development, use editable mode instead:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+```
+
+Once installed, your LLM client should call the agent through the `clickup-agent` command. The MCP-style entrypoint is reserved as:
+
+```bash
+clickup-agent mcp
+```
+
+Example LLM client server configuration:
+
+```json
+{
+  "mcpServers": {
+    "clickup-agent": {
+      "command": "clickup-agent",
+      "args": ["mcp"],
+      "env": {
+        "CLICKUP_ENV_FILE": "/absolute/path/to/clickup-agentic-native/.env.local"
+      }
+    }
+  }
+}
+```
+
+For clients that do not support MCP yet, the fallback integration shape is to call focused CLI commands directly, such as `clickup-agent run search` or `clickup-agent run create-task`.
+
+Check your local setup:
+
+```bash
+clickup-agent doctor --env-file .env.local
+```
+
 ## Architecture Direction
 
 The repo should favor agentic atomic primitives that can be composed into larger workflows:
@@ -64,3 +133,7 @@ CLICKUP_WORKSPACE_ID=
 ```
 
 No ClickUp API key should ever be committed to this repo.
+
+## License
+
+This project is licensed under the Apache License, Version 2.0. Keep the `NOTICE` file with redistributions so attribution is preserved.
