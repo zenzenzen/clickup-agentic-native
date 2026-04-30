@@ -1,0 +1,36 @@
+# Local secrets and environment overrides stay off Git.
+.env
+.env.*
+!.env.example
+
+# Python runtime and packaging artifacts.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# Node/tooling artifacts for future web or CLI helpers.
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor, OS, and local workspace noise.
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Generated outputs and caches should be intentionally promoted if needed.
+coverage/
+.coverage
+tmp/
+out/
