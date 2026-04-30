@@ -104,6 +104,16 @@ Check your local setup:
 clickup-agent doctor --env-file .env.local
 ```
 
+## Install Agent Skill
+
+Install the repo's agent-facing skill into Codex discovery:
+
+```bash
+bash scripts/install-skill.sh
+```
+
+The skill installs to `~/.codex/skills/clickup-agentic-native` by default, or to `$CODEX_HOME/skills/clickup-agentic-native` when `CODEX_HOME` is set. Agents can then use `clickup-agentic-native` to discover setup commands, MCP/Cursor configuration, local scripts, secret-handling rules, and current/planned ClickUp capabilities.
+
 ## Architecture Direction
 
 The repo should favor agentic atomic primitives that can be composed into larger workflows:
