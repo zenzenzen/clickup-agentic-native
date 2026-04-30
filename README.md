@@ -45,6 +45,13 @@ Then edit `.env.local`:
 ```bash
 CLICKUP_API_KEY=your_clickup_personal_token
 CLICKUP_WORKSPACE_ID=your_default_workspace_id
+CLICKUP_WEBHOOK_SECRET=optional_future_webhook_signing_secret
+```
+
+Or let the installer walk you through it:
+
+```bash
+bash scripts/install.sh
 ```
 
 Install the Python package:
@@ -130,6 +137,7 @@ Copy `.env.example` to `.env.local` and fill in local values. Real credentials m
 ```bash
 CLICKUP_API_KEY=
 CLICKUP_WORKSPACE_ID=
+CLICKUP_WEBHOOK_SECRET=
 ```
 
 No ClickUp API key should ever be committed to this repo.

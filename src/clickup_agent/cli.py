@@ -33,9 +33,11 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     _load_env_file(args.env_file or os.getenv("CLICKUP_ENV_FILE"))
     has_key = bool(os.getenv("CLICKUP_API_KEY"))
     has_workspace = bool(os.getenv("CLICKUP_WORKSPACE_ID"))
+    has_webhook_secret = bool(os.getenv("CLICKUP_WEBHOOK_SECRET"))
     print(f"clickup-agent {__version__}")
     print(f"CLICKUP_API_KEY: {'configured' if has_key else 'missing'}")
     print(f"CLICKUP_WORKSPACE_ID: {'configured' if has_workspace else 'missing'}")
+    print(f"CLICKUP_WEBHOOK_SECRET: {'configured' if has_webhook_secret else 'optional / missing'}")
     if not has_key:
         print("Create .env.local from .env.example, then set CLICKUP_API_KEY.")
         return 1
