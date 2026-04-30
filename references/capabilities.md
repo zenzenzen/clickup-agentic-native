@@ -10,6 +10,7 @@ Use this when explaining what the agent can do today versus what is planned.
 - `scripts/install.sh` for env file, local install, and Cursor MCP config
 - `scripts/install-skill.sh` for Codex skill discovery
 - Cursor project/global MCP config shape
+- Agent guidance for discovering an existing GitHub PR for the current branch and carrying that PR URL into planned ClickUp task updates
 - Bootstrap MCP tools:
   - `clickup_agent_status`
   - `clickup_agent_tooling_plan`
@@ -55,6 +56,7 @@ Placeholder commands explain the future contract instead of performing ClickUp A
 - Set priority
 - Add or remove tags
 - Start or stop timer
+- Link an existing branch PR into the related ClickUp task for development-reference parity
 
 ## Accuracy Rule
 

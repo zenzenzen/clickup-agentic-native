@@ -34,6 +34,7 @@ If working from the repo, use the repo root as the working directory. If `clicku
 - **Create `.env.local` safely**: use `bash scripts/install.sh` or follow `references/setup.md`.
 - **Connect Cursor or another LLM client**: read `references/mcp-cursor.md`; use `clickup-agent mcp` as the stdio server command.
 - **Explain capabilities**: read `references/capabilities.md` and distinguish implemented scaffolding from planned ClickUp API tools.
+- **Back-link development work**: read `references/development-links.md`; if a GitHub PR already exists for the current branch, include its URL when updating the related ClickUp task.
 - **Install this skill for Codex discovery**: run `bash scripts/install-skill.sh`.
 
 ## Current Truth
