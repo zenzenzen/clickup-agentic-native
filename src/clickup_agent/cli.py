@@ -54,6 +54,14 @@ def _cmd_placeholder(name: str, next_step: str):
     return run
 
 
+def _cmd_mcp(_: argparse.Namespace) -> int:
+    """Run the MCP stdio server used by Cursor and other LLM clients."""
+    from .mcp_server import run
+
+    run()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the command parser shared by console script and module entrypoint."""
     parser = argparse.ArgumentParser(prog="clickup-agent")
@@ -68,7 +76,7 @@ def build_parser() -> argparse.ArgumentParser:
     chat.set_defaults(func=_cmd_placeholder("chat", "interactive ClickUp work sessions"))
 
     mcp = subcommands.add_parser("mcp", help="Start the future LLM/MCP tool server.")
-    mcp.set_defaults(func=_cmd_placeholder("mcp", "LLM client access over MCP stdio"))
+    mcp.set_defaults(func=_cmd_mcp)
 
     tools = subcommands.add_parser("tools", help="Inspect future ClickUp tools.")
     tools_subcommands = tools.add_subparsers(dest="tools_command", required=True)

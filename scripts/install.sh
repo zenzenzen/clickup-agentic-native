@@ -78,8 +78,111 @@ write_env_file() {
 
 install_package() {
   say "Install the clickup-agent command?"
-  printf '  1) pipx install . (recommended for normal use)\n'
+  printf '  1) uv tool install . (recommended when uv is available)\n'
   printf '  2) python -m pip install -e . (editable development install)\n'
+  printf '  3) pipx install .\n'
+  printf '  4) skip for now\n'
+
+  local choice
+  read -r -p "Choose 1, 2, 3, or 4 [1]: " choice
+  choice="${choice:-1}"
+
+  case "${choice}" in
+    1)
+      if ! command -v uv >/dev/null 2>&1; then
+        say "uv is not installed. Skipping package install."
+        printf 'Install uv later, then run: uv tool install "%s" --python 3.11 --reinstall\n' "${REPO_ROOT}"
+        return 0
+      fi
+      (cd "${REPO_ROOT}" && uv tool install . --python 3.11 --reinstall)
+      ;;
+    2)
+      (cd "${REPO_ROOT}" && python3 -m pip install -e .)
+      ;;
+    3)
+      if ! command -v pipx >/dev/null 2>&1; then
+        say "pipx is not installed. Skipping package install."
+        printf 'Install pipx later, then run: pipx install "%s"\n' "${REPO_ROOT}"
+        return 0
+      fi
+      (cd "${REPO_ROOT}" && pipx install . --force)
+      ;;
+    4)
+      say "Skipping package install."
+      ;;
+    *)
+      say "Unknown choice; skipping package install."
+      ;;
+  esac
+}
+
+cursor_config_path() {
+  local scope="$1"
+  case "${scope}" in
+    project)
+      printf '%s/.cursor/mcp.json' "${REPO_ROOT}"
+      ;;
+    global)
+      printf '%s/.cursor/mcp.json' "${HOME}"
+      ;;
+  esac
+}
+
+install_cursor_config() {
+  local env_file="$1"
+  local scope="$2"
+  local config_file
+  local command_path
+
+  config_file="$(cursor_config_path "${scope}")"
+  command_path="$(command -v clickup-agent || true)"
+  command_path="${command_path:-clickup-agent}"
+
+  mkdir -p "$(dirname "${config_file}")"
+  if [[ -e "${config_file}" ]]; then
+    local backup="${config_file}.bak.$(date +%Y%m%d%H%M%S)"
+    cp "${config_file}" "${backup}"
+    say "Existing Cursor MCP config backed up to ${backup}"
+  fi
+
+  python3 - "${config_file}" "${command_path}" "${env_file}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+config_path = Path(sys.argv[1])
+command = sys.argv[2]
+env_file = sys.argv[3]
+
+if config_path.exists() and config_path.read_text(encoding="utf-8").strip():
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"Could not parse existing {config_path}: {exc}") from exc
+else:
+    config = {}
+
+servers = config.setdefault("mcpServers", {})
+servers["clickup-agent"] = {
+    "command": command,
+    "args": ["mcp"],
+    "env": {
+        "CLICKUP_ENV_FILE": env_file,
+    },
+}
+
+config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+PY
+
+  say "Installed Cursor MCP server config at ${config_file}"
+}
+
+maybe_install_cursor_config() {
+  local env_file="$1"
+
+  say "Install clickup-agent for Cursor MCP access?"
+  printf '  1) project config at .cursor/mcp.json\n'
+  printf '  2) global config at ~/.cursor/mcp.json\n'
   printf '  3) skip for now\n'
 
   local choice
@@ -88,21 +191,16 @@ install_package() {
 
   case "${choice}" in
     1)
-      if ! command -v pipx >/dev/null 2>&1; then
-        say "pipx is not installed. Skipping package install."
-        printf 'Install pipx later, then run: pipx install "%s"\n' "${REPO_ROOT}"
-        return 0
-      fi
-      (cd "${REPO_ROOT}" && pipx install . --force)
+      install_cursor_config "${env_file}" "project"
       ;;
     2)
-      (cd "${REPO_ROOT}" && python3 -m pip install -e .)
+      install_cursor_config "${env_file}" "global"
       ;;
     3)
-      say "Skipping package install."
+      say "Skipping Cursor MCP config."
       ;;
     *)
-      say "Unknown choice; skipping package install."
+      say "Unknown choice; skipping Cursor MCP config."
       ;;
   esac
 }
@@ -147,6 +245,7 @@ main() {
   say "Wrote ${env_file} with owner-only permissions."
 
   install_package
+  maybe_install_cursor_config "${env_file}"
   print_llm_client_snippet "${env_file}"
 
   say "Next check:"

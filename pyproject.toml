@@ -11,6 +11,9 @@ requires-python = ">=3.11"
 license = { file = "LICENSE" }
 authors = [{ name = "zenzenzen" }]
 keywords = ["clickup", "agent", "mcp", "llm", "workflow"]
+dependencies = [
+  "mcp>=1.2.0,<2",
+]
 
 [project.scripts]
 clickup-agent = "clickup_agent.cli:main"

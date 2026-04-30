@@ -54,16 +54,18 @@ Or let the installer walk you through it:
 bash scripts/install.sh
 ```
 
+The installer can also add `clickup-agent` to Cursor as an MCP server. Choose project config for this repo only, or global config for every Cursor workspace.
+
 Install the Python package:
 
 ```bash
-pipx install .
+uv tool install . --python 3.11 --reinstall
 ```
 
 During early development, use editable mode instead:
 
 ```bash
-python -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
 ```
@@ -91,6 +93,10 @@ Example LLM client server configuration:
 ```
 
 For clients that do not support MCP yet, the fallback integration shape is to call focused CLI commands directly, such as `clickup-agent run search` or `clickup-agent run create-task`.
+
+For Cursor, place the same server definition in `.cursor/mcp.json` for a project-specific install or `~/.cursor/mcp.json` for a global install. The installer can write this for you and preserves any existing MCP servers. A portable template lives at `.cursor/mcp.example.json`.
+
+This repo includes a project-local `.cursor/mcp.json` that points Cursor at the installed `clickup-agent` command and this repo's `.env.local` file.
 
 Check your local setup:
 
