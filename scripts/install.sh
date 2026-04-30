@@ -91,10 +91,10 @@ install_package() {
     1)
       if ! command -v uv >/dev/null 2>&1; then
         say "uv is not installed. Skipping package install."
-        printf 'Install uv later, then run: uv tool install "%s" --python 3.11 --reinstall\n' "${REPO_ROOT}"
+        printf 'Install uv later, then run: uv tool install "%s" --python 3.12 --reinstall\n' "${REPO_ROOT}"
         return 0
       fi
-      (cd "${REPO_ROOT}" && uv tool install . --python 3.11 --reinstall)
+      (cd "${REPO_ROOT}" && uv tool install . --python 3.12 --reinstall)
       ;;
     2)
       (cd "${REPO_ROOT}" && python3 -m pip install -e .)

@@ -59,13 +59,13 @@ The installer can also add `clickup-agent` to Cursor as an MCP server. Choose pr
 Install the Python package:
 
 ```bash
-uv tool install . --python 3.11 --reinstall
+uv tool install . --python 3.12 --reinstall
 ```
 
 During early development, use editable mode instead:
 
 ```bash
-python3.11 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
 ```
