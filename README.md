@@ -4,6 +4,12 @@
 
 The command name for the project will be `clickup-agent`.
 
+## Attribution
+
+This project is based on interfacing with ClickUp, the work management platform and APIs provided by ClickUp, Inc. ClickUp is a trademark of ClickUp, Inc.
+
+`clickup-agentic-native` is an independent integration project and is not affiliated with, sponsored by, or endorsed by ClickUp, Inc.
+
 ## Vision
 
 This project exists to make ClickUp feel like a native operational layer for my company workflow, not a separate place I have to manually visit and maintain.
