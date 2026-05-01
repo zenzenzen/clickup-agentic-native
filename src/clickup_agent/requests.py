@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote
 
 from .registry import ToolOperation
 
@@ -50,7 +51,7 @@ def _replace_path(path: str, name: str, value: Any) -> str:
     token = "{" + name + "}"
     if token not in path:
         return path
-    return path.replace(token, str(value))
+    return path.replace(token, quote(str(value), safe=""))
 
 
 def build_operation_request(operation: ToolOperation, payload: dict[str, Any]) -> OperationRequest:

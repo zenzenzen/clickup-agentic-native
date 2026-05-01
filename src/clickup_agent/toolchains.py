@@ -60,6 +60,8 @@ class ToolchainRunner:
             "set-status": _run_set_status,
             "assign": _run_assign,
             "set-due-date": _run_set_due_date,
+            "comment": _run_comment,
+            "tags": _run_tags,
         }
 
     def run(self, name: str, argv: list[str]) -> RunResult:
@@ -341,3 +343,75 @@ def _current_assignee_ids(response: Any) -> list[int]:
         elif isinstance(assignee, int):
             ids.append(assignee)
     return ids
+
+
+def _run_comment(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_comment)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    body = {
+        "comment_text": payload.pop("text"),
+        "notify_all": bool(payload.pop("notify_all", False)),
+    }
+    if "assignee" in payload:
+        body["assignee"] = int(payload.pop("assignee"))
+    if "group_assignee" in payload:
+        body["group_assignee"] = payload.pop("group_assignee")
+    payload["body"] = body
+    operation, response = _execute_operation(catalog, "CreateTaskComment", payload, dry_run=options.dry_run, client=client)
+    return RunResult(options.name, options.dry_run, [operation], response)
+
+
+def _configure_comment(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", required=False)
+    parser.add_argument("--text", required=True)
+    parser.add_argument("--notify-all", action="store_true", default=None)
+    parser.add_argument("--assignee")
+    parser.add_argument("--group-assignee")
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
+
+
+def _run_tags(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_tags)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    adds = [str(item) for item in _csv_or_list(payload.pop("add", []))]
+    removes = [str(item) for item in _csv_or_list(payload.pop("remove", []))]
+    if not adds and not removes:
+        raise ToolchainError("tags requires at least one --add or --remove value")
+
+    operations: list[dict[str, Any]] = []
+    responses: list[Any] = []
+    base_payload = {
+        key: value
+        for key, value in payload.items()
+        if key in {"task_id", "custom_task_ids", "team_id"}
+    }
+    for tag_name in adds:
+        operation, response = _execute_operation(
+            catalog,
+            "AddTagToTask",
+            {**base_payload, "tag_name": tag_name},
+            dry_run=options.dry_run,
+            client=client,
+        )
+        operations.append(operation)
+        responses.append(response)
+    for tag_name in removes:
+        operation, response = _execute_operation(
+            catalog,
+            "RemoveTagFromTask",
+            {**base_payload, "tag_name": tag_name},
+            dry_run=options.dry_run,
+            client=client,
+        )
+        operations.append(operation)
+        responses.append(response)
+    return RunResult(options.name, options.dry_run, operations, None if options.dry_run else responses)
+
+
+def _configure_tags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", required=False)
+    parser.add_argument("--add", action="append")
+    parser.add_argument("--remove", action="append")
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
