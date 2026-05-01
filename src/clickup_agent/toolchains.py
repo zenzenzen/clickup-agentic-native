@@ -49,11 +49,18 @@ class RunResult:
 
 
 ToolchainHandler = Callable[[RunOptions, ToolCatalog, ClickUpClient | None], RunResult]
+ClientFactory = Callable[[str | None], ClickUpClient]
 
 
 class ToolchainRunner:
-    def __init__(self, catalog: ToolCatalog | None = None) -> None:
+    def __init__(
+        self,
+        catalog: ToolCatalog | None = None,
+        *,
+        client_factory: ClientFactory = ClickUpClient.from_environment,
+    ) -> None:
         self.catalog = catalog or load_catalog()
+        self.client_factory = client_factory
         self.handlers: dict[str, ToolchainHandler] = {
             "search": _run_search,
             "create-task": _run_create_task,
@@ -74,7 +81,7 @@ class ToolchainRunner:
 
         client: ClickUpClient | None = None
         if not options.dry_run:
-            client = ClickUpClient.from_environment(options.env_file)
+            client = self.client_factory(options.env_file)
         try:
             return handler(options, self.catalog, client)
         finally:
