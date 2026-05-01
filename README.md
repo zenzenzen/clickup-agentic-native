@@ -18,7 +18,7 @@ The goal is an agent that can understand work context, resolve ClickUp entities,
 
 ## Command Shape
 
-The initial CLI should grow around clear, memorable commands:
+The CLI grows around clear, memorable commands:
 
 ```bash
 clickup-agent chat
@@ -26,6 +26,26 @@ clickup-agent tools list
 clickup-agent hotkeys list
 clickup-agent run <hotkey-or-toolchain>
 clickup-agent doctor
+```
+
+Discovery commands are backed by a committed catalog generated from ClickUp's official V2 OpenAPI spec:
+
+```bash
+clickup-agent tools list --tag Tasks --write-only
+clickup-agent hotkeys list --format json
+```
+
+The first practical run toolchains support dry-run previews and live execution when `CLICKUP_API_KEY` is configured:
+
+```bash
+clickup-agent run search --dry-run --team-id 123 --query roadmap
+clickup-agent run create-task --dry-run --list-id 456 --name "Write launch notes"
+clickup-agent run set-status --dry-run --task-id abc --status "in progress"
+clickup-agent run assign --dry-run --task-id abc --assignee 182 --mode add
+clickup-agent run set-due-date --dry-run --task-id abc --due-date 2026-05-01
+clickup-agent run comment --dry-run --task-id abc --text "PR is ready"
+clickup-agent run tags --dry-run --task-id abc --add review --remove stale
+clickup-agent run timer --dry-run --action start --team-id 123 --task-id abc
 ```
 
 ## Install Your Own Agent
@@ -141,16 +161,23 @@ Development should move in small, easy-to-review steps.
 - Prefer clear primitives over large, tangled helpers.
 - Treat destructive or admin ClickUp operations as confirmation-gated by default.
 
-## Initial Roadmap
+## Implemented Native Surface
 
-The first implementation pass should establish:
+- Typed registry models for generated operations and curated toolchains.
+- `scripts/generate_tool_catalog.py` for generating `src/clickup_agent/catalog/tool_catalog.json`.
+- ClickUp HTTP client with auth, redacted errors, and JSON response handling.
+- Registry-backed `tools list` and `hotkeys list` discovery.
+- `run` toolchains for search, create task, status update, assignment, due date, comment, tags, and timers.
+- Dry-run output for every first-pass write workflow.
 
-- A ClickUp API client with auth, pagination, rate-limit handling, and secret redaction.
-- A tool registry for generated and curated ClickUp tools.
+## Roadmap
+
+Future implementation passes should expand:
+
 - A context/session layer for resolving workspace, list, task, doc, user, group, and channel references.
-- Hotkey toolchains using `clickup-agent run`.
 - Full comments capability for task, list, view, and threaded comments.
 - Tasks, docs, users, guests, user groups, lists, attachments, webhooks, and time tracking coverage.
+- Pagination helpers, richer rate-limit handling, and broader generated-operation execution.
 
 ## Secret Handling
 

@@ -39,9 +39,9 @@ If working from the repo, use the repo root as the working directory. If `clicku
 
 ## Current Truth
 
-Implemented today: Python 3.12 CLI scaffold, `doctor`, interactive installer, MCP bootstrap server, Cursor MCP config support, and skill installation.
+Implemented today: Python 3.12 CLI, generated ClickUp V2 tool catalog, `tools list`, `hotkeys list`, first `run` toolchains, `doctor`, interactive installer, MCP bootstrap server, Cursor MCP config support, and skill installation.
 
-Planned: native ClickUp API tools for comments, tasks, docs, users, guests, user groups, lists, time tracking, attachments, webhooks, and hotkey toolchains.
+Planned: broader ClickUp API workflows for docs, users, guests, user groups, lists, attachments, webhooks, admin surfaces, richer entity resolution, and expanded hotkey toolchains.
 
 ## Validation
 
@@ -51,5 +51,7 @@ After changes, prefer focused checks:
 bash -n scripts/install.sh
 bash -n scripts/install-skill.sh
 clickup-agent --version
+clickup-agent tools list --format json
+clickup-agent hotkeys list
 clickup-agent doctor --env-file .env.example || true
 ```
