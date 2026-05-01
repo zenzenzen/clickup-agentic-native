@@ -8,27 +8,23 @@ planned ClickUp tool surface before full ClickUp API tools are implemented.
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
 from . import __version__
-from .cli import _load_env_file
+from .config import config_status
+from .registry import load_catalog
 
 SERVER_NAME = "clickup-agent"
 
 
 def _configure_environment(env_file: str | None = None) -> dict[str, Any]:
     """Load optional env file and return redacted configuration status."""
-    selected_env_file = env_file or os.getenv("CLICKUP_ENV_FILE")
-    _load_env_file(selected_env_file)
+    status = config_status(env_file or os.getenv("CLICKUP_ENV_FILE"))
     return {
         "version": __version__,
-        "env_file": str(Path(selected_env_file).expanduser()) if selected_env_file else None,
-        "clickup_api_key_configured": bool(os.getenv("CLICKUP_API_KEY")),
-        "clickup_workspace_id_configured": bool(os.getenv("CLICKUP_WORKSPACE_ID")),
-        "clickup_webhook_secret_configured": bool(os.getenv("CLICKUP_WEBHOOK_SECRET")),
+        **status,
     }
 
 
@@ -43,34 +39,33 @@ def create_server() -> FastMCP:
 
     @server.tool()
     def clickup_agent_tooling_plan() -> dict[str, Any]:
-        """Return the planned native ClickUp toolsets for this agent."""
+        """Return the generated and curated native ClickUp tool surface."""
+        catalog = load_catalog()
         return {
             "command": "clickup-agent",
-            "planned_toolsets": [
-                "clickup_core",
-                "clickup_hierarchy",
-                "clickup_tasks",
-                "clickup_comments",
-                "clickup_people",
-                "clickup_search",
-                "clickup_docs",
-                "clickup_chat",
-                "clickup_files",
-                "clickup_time",
-                "clickup_admin",
+            "catalog": {
+                "source": catalog.source,
+                "source_version": catalog.source_version,
+                "operation_count": len(catalog.operations),
+                "write_operation_count": len([operation for operation in catalog.operations if operation.is_write]),
+            },
+            "implemented_commands": [
+                "clickup-agent tools list",
+                "clickup-agent hotkeys list",
+                "clickup-agent run search",
+                "clickup-agent run create-task",
+                "clickup-agent run set-status",
+                "clickup-agent run assign",
+                "clickup-agent run set-due-date",
+                "clickup-agent run comment",
+                "clickup-agent run tags",
+                "clickup-agent run timer",
             ],
-            "first_workflows": [
-                "search workspace",
-                "create task",
-                "set task status",
-                "assign task",
-                "set due date",
-                "comment on task",
-                "create subtasks",
-                "set priority",
-                "add or remove tags",
-                "start or stop timer",
+            "hotkeys": [
+                toolchain.to_dict()
+                for toolchain in catalog.toolchains
             ],
+            "sample_operations": [operation.to_dict() for operation in catalog.operations[:10]],
         }
 
     return server
