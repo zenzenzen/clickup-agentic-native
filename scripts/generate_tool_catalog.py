@@ -38,7 +38,7 @@ TOOLCHAINS = [
     {
         "name": "assign",
         "summary": "Add, remove, or replace task assignees.",
-        "operation_ids": ["UpdateTask"],
+        "operation_ids": ["GetTask", "UpdateTask"],
         "is_write": True,
     },
     {

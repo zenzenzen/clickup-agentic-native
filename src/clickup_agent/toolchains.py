@@ -57,6 +57,9 @@ class ToolchainRunner:
         self.handlers: dict[str, ToolchainHandler] = {
             "search": _run_search,
             "create-task": _run_create_task,
+            "set-status": _run_set_status,
+            "assign": _run_assign,
+            "set-due-date": _run_set_due_date,
         }
 
     def run(self, name: str, argv: list[str]) -> RunResult:
@@ -236,3 +239,105 @@ def _configure_create_task(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--assignee", dest="assignees", action="append")
     parser.add_argument("--tag", dest="tags", action="append")
     parser.add_argument("--due-date", dest="due_date_iso")
+
+
+def _run_set_status(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_set_status)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    payload["body"] = {"status": payload.pop("status")}
+    operation, response = _execute_operation(catalog, "UpdateTask", payload, dry_run=options.dry_run, client=client)
+    return RunResult(options.name, options.dry_run, [operation], response)
+
+
+def _configure_set_status(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", required=False)
+    parser.add_argument("--status", required=True)
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
+
+
+def _run_set_due_date(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_set_due_date)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    body: dict[str, Any] = {"due_date": _date_to_epoch_millis(str(payload.pop("due_date_iso")))}
+    if "due_date_time" in payload:
+        body["due_date_time"] = bool(payload.pop("due_date_time"))
+    payload["body"] = body
+    operation, response = _execute_operation(catalog, "UpdateTask", payload, dry_run=options.dry_run, client=client)
+    return RunResult(options.name, options.dry_run, [operation], response)
+
+
+def _configure_set_due_date(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", required=False)
+    parser.add_argument("--due-date", dest="due_date_iso", required=True)
+    parser.add_argument("--due-date-time", action="store_true", default=None)
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
+
+
+def _run_assign(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_assign)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    mode = str(payload.pop("mode", "add"))
+    assignee_ids = [int(item) for item in _csv_or_list(payload.pop("assignees", []))]
+    if not assignee_ids:
+        raise ToolchainError("assign requires at least one --assignee or assignees JSON value")
+
+    operations: list[dict[str, Any]] = []
+    if mode == "replace":
+        get_payload = {
+            key: value
+            for key, value in payload.items()
+            if key in {"task_id", "custom_task_ids", "team_id"}
+        }
+        get_operation, get_response = _execute_operation(
+            catalog,
+            "GetTask",
+            get_payload,
+            dry_run=options.dry_run,
+            client=client,
+        )
+        operations.append(get_operation)
+        remove_ids = _current_assignee_ids(get_response) if not options.dry_run else []
+        body = {
+            "assignees": {
+                "add": assignee_ids,
+                "rem": [item for item in remove_ids if item not in assignee_ids],
+            }
+        }
+        if options.dry_run:
+            body["replace_note"] = "Live run removes current assignees not in the requested replacement set."
+    elif mode == "remove":
+        body = {"assignees": {"add": [], "rem": assignee_ids}}
+    elif mode == "add":
+        body = {"assignees": {"add": assignee_ids, "rem": []}}
+    else:
+        raise ToolchainError("assign --mode must be add, remove, or replace")
+
+    payload["body"] = body
+    update_operation, response = _execute_operation(catalog, "UpdateTask", payload, dry_run=options.dry_run, client=client)
+    operations.append(update_operation)
+    return RunResult(options.name, options.dry_run, operations, response)
+
+
+def _configure_assign(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", required=False)
+    parser.add_argument("--assignee", dest="assignees", action="append")
+    parser.add_argument("--mode", choices=["add", "remove", "replace"], default="add")
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
+
+
+def _current_assignee_ids(response: Any) -> list[int]:
+    if not isinstance(response, dict):
+        return []
+    assignees = response.get("assignees") or []
+    if not isinstance(assignees, list):
+        return []
+    ids: list[int] = []
+    for assignee in assignees:
+        if isinstance(assignee, dict) and "id" in assignee:
+            ids.append(int(assignee["id"]))
+        elif isinstance(assignee, int):
+            ids.append(assignee)
+    return ids

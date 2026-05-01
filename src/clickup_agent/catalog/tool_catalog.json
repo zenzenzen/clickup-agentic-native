@@ -9582,6 +9582,7 @@
       "is_write": true,
       "name": "assign",
       "operation_ids": [
+        "GetTask",
         "UpdateTask"
       ],
       "summary": "Add, remove, or replace task assignees."
