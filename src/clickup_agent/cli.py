@@ -8,24 +8,14 @@ from __future__ import annotations
 
 import argparse
 import os
-from pathlib import Path
 
 from . import __version__
+from .config import load_env_file
 
 
 def _load_env_file(path: str | None) -> None:
     """Load simple KEY=VALUE pairs without adding a runtime dependency yet."""
-    if not path:
-        return
-    env_path = Path(path).expanduser()
-    if not env_path.exists():
-        return
-    for line in env_path.read_text(encoding="utf-8").splitlines():
-        cleaned = line.strip()
-        if not cleaned or cleaned.startswith("#") or "=" not in cleaned:
-            continue
-        key, value = cleaned.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+    load_env_file(path)
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
