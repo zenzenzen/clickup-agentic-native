@@ -62,6 +62,7 @@ class ToolchainRunner:
             "set-due-date": _run_set_due_date,
             "comment": _run_comment,
             "tags": _run_tags,
+            "timer": _run_timer,
         }
 
     def run(self, name: str, argv: list[str]) -> RunResult:
@@ -415,3 +416,77 @@ def _configure_tags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--remove", action="append")
     parser.add_argument("--custom-task-ids", action="store_true", default=None)
     parser.add_argument("--team-id")
+
+
+def _run_timer(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_timer)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    action = str(payload.pop("action", "current"))
+    workspace_id = payload.pop("workspace_id", None) or payload.pop("team_id", None)
+    if not workspace_id and client and client.config.workspace_id:
+        workspace_id = client.config.workspace_id
+    if not workspace_id:
+        raise ToolchainError("timer requires --team-id, --workspace-id, or CLICKUP_WORKSPACE_ID")
+
+    if action == "current":
+        operation_payload = {"team_id": workspace_id}
+        if "assignee" in payload:
+            operation_payload["assignee"] = payload.pop("assignee")
+        operation, response = _execute_operation(
+            catalog,
+            "Getrunningtimeentry",
+            operation_payload,
+            dry_run=options.dry_run,
+            client=client,
+        )
+        return RunResult(options.name, options.dry_run, [operation], response)
+
+    if action == "stop":
+        operation, response = _execute_operation(
+            catalog,
+            "StopatimeEntry",
+            {"team_id": workspace_id},
+            dry_run=options.dry_run,
+            client=client,
+        )
+        return RunResult(options.name, options.dry_run, [operation], response)
+
+    if action == "start":
+        body: dict[str, Any] = {}
+        if "task_id" in payload:
+            body["tid"] = payload.pop("task_id")
+        if "description" in payload:
+            body["description"] = payload.pop("description")
+        if "tags" in payload:
+            body["tags"] = [{"name": str(item)} for item in _csv_or_list(payload.pop("tags"))]
+        if "billable" in payload:
+            body["billable"] = bool(payload.pop("billable"))
+        operation_payload = {
+            "team_Id": workspace_id,
+            "body": body,
+        }
+        if payload.get("custom_task_ids"):
+            operation_payload["custom_task_ids"] = payload.pop("custom_task_ids")
+            operation_payload["team_id"] = workspace_id
+        operation, response = _execute_operation(
+            catalog,
+            "StartatimeEntry",
+            operation_payload,
+            dry_run=options.dry_run,
+            client=client,
+        )
+        return RunResult(options.name, options.dry_run, [operation], response)
+
+    raise ToolchainError("timer --action must be current, start, or stop")
+
+
+def _configure_timer(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--action", choices=["current", "start", "stop"], default="current")
+    parser.add_argument("--team-id")
+    parser.add_argument("--workspace-id")
+    parser.add_argument("--task-id")
+    parser.add_argument("--description")
+    parser.add_argument("--tag", dest="tags", action="append")
+    parser.add_argument("--billable", action="store_true", default=None)
+    parser.add_argument("--assignee")
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
