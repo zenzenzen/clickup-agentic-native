@@ -111,6 +111,39 @@ def _cmd_tools_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_hotkeys_list(args: argparse.Namespace) -> int:
+    catalog = load_catalog()
+    rows = [
+        {
+            "name": toolchain.name,
+            "operations": ",".join(toolchain.operation_ids),
+            "write": toolchain.is_write,
+            "summary": toolchain.summary,
+        }
+        for toolchain in catalog.toolchains
+    ]
+    if args.format == "json":
+        _print_json(
+            {
+                "source": catalog.source,
+                "source_version": catalog.source_version,
+                "count": len(rows),
+                "hotkeys": rows,
+            }
+        )
+        return 0
+    _print_table(
+        rows,
+        [
+            ("name", "Name"),
+            ("operations", "Operations"),
+            ("write", "Write"),
+            ("summary", "Summary"),
+        ],
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the command parser shared by console script and module entrypoint."""
     parser = argparse.ArgumentParser(prog="clickup-agent")
@@ -138,7 +171,8 @@ def build_parser() -> argparse.ArgumentParser:
     hotkeys = subcommands.add_parser("hotkeys", help="Inspect future hotkey toolchains.")
     hotkeys_subcommands = hotkeys.add_subparsers(dest="hotkeys_command", required=True)
     hotkeys_list = hotkeys_subcommands.add_parser("list", help="List future hotkey toolchains.")
-    hotkeys_list.set_defaults(func=_cmd_placeholder("hotkeys list", "ClickUp-inspired workflow shortcuts"))
+    hotkeys_list.add_argument("--format", choices=["table", "json"], default="table", help="Output format.")
+    hotkeys_list.set_defaults(func=_cmd_hotkeys_list)
 
     run = subcommands.add_parser("run", help="Run a future hotkey or toolchain.")
     run.add_argument("name", help="Hotkey or toolchain name.")
