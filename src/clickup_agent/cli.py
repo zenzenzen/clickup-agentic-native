@@ -13,6 +13,7 @@ import os
 from . import __version__
 from .config import load_env_file
 from .registry import ToolOperation, load_catalog
+from .toolchains import ToolchainError, run_toolchain
 
 
 def _load_env_file(path: str | None) -> None:
@@ -144,6 +145,16 @@ def _cmd_hotkeys_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_run(args: argparse.Namespace) -> int:
+    try:
+        result = run_toolchain(args.name, args.tool_args)
+    except ToolchainError as exc:
+        print(str(exc))
+        return 2
+    _print_json(result.to_dict())
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the command parser shared by console script and module entrypoint."""
     parser = argparse.ArgumentParser(prog="clickup-agent")
@@ -176,7 +187,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = subcommands.add_parser("run", help="Run a future hotkey or toolchain.")
     run.add_argument("name", help="Hotkey or toolchain name.")
-    run.set_defaults(func=_cmd_placeholder("run", "executing named ClickUp toolchains"))
+    run.add_argument("tool_args", nargs=argparse.REMAINDER, help="Toolchain-specific flags.")
+    run.set_defaults(func=_cmd_run)
 
     return parser
 
