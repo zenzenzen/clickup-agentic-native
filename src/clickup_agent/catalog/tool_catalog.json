@@ -325,7 +325,28 @@
       ],
       "path": "/v2/comment/{comment_id}/reply",
       "request_schema": {
-        "$ref": "#/paths/~1v2~1task~1%7Btask_id%7D~1comment/post/requestBody/content/application~1json/schema"
+        "properties": {
+          "assignee": {
+            "contentEncoding": "int32",
+            "type": "integer"
+          },
+          "comment_text": {
+            "type": "string"
+          },
+          "group_assignee": {
+            "contentEncoding": "int32",
+            "type": "string"
+          },
+          "notify_all": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "comment_text",
+          "notify_all"
+        ],
+        "title": "CreateTaskCommentrequest",
+        "type": "object"
       },
       "response_schema": {
         "statuses": {
@@ -588,7 +609,7 @@
               "application/json"
             ],
             "description": "",
-            "schema_ref": "#/paths/~1v2~1task~1%7Btask_id%7D~1comment/get/responses/200/content/application~1json/schema",
+            "schema_ref": null,
             "schema_title": null
           }
         }
@@ -2821,7 +2842,106 @@
             "type": "string"
           },
           "options": {
-            "$ref": "#/paths/~1v2~1space~1%7Bspace_id%7D~1list_template~1%7Btemplate_id%7D/post/requestBody/content/application~1json/schema/properties/options"
+            "properties": {
+              "archived": {
+                "enum": [
+                  1,
+                  2,
+                  null
+                ],
+                "type": "integer"
+              },
+              "attachments": {
+                "type": "boolean"
+              },
+              "automation": {
+                "type": "boolean"
+              },
+              "comment": {
+                "type": "boolean"
+              },
+              "comment_attachments": {
+                "type": "boolean"
+              },
+              "content": {
+                "type": "string"
+              },
+              "custom_fields": {
+                "type": "boolean"
+              },
+              "custom_type": {
+                "type": "boolean"
+              },
+              "due_date": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "external_dependencies": {
+                "type": "boolean"
+              },
+              "include_views": {
+                "type": "boolean"
+              },
+              "internal_dependencies": {
+                "type": "boolean"
+              },
+              "old_assignees": {
+                "type": "boolean"
+              },
+              "old_checklists": {
+                "type": "boolean"
+              },
+              "old_due_date": {
+                "type": "boolean"
+              },
+              "old_followers": {
+                "type": "boolean"
+              },
+              "old_start_date": {
+                "type": "boolean"
+              },
+              "old_status": {
+                "type": "boolean"
+              },
+              "old_statuses": {
+                "type": "boolean"
+              },
+              "old_subtask_assignees": {
+                "type": "boolean"
+              },
+              "old_tags": {
+                "type": "boolean"
+              },
+              "priority": {
+                "type": "boolean"
+              },
+              "recur_settings": {
+                "type": "boolean"
+              },
+              "relationships": {
+                "type": "boolean"
+              },
+              "remap_start_date": {
+                "type": "boolean"
+              },
+              "return_immediately": {
+                "type": "boolean"
+              },
+              "skip_weekends": {
+                "type": "boolean"
+              },
+              "start_date": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "subtasks": {
+                "type": "boolean"
+              },
+              "time_estimate": {
+                "type": "number"
+              }
+            },
+            "type": "object"
           }
         },
         "required": [
@@ -2836,7 +2956,7 @@
               "application/json"
             ],
             "description": "List created successfully",
-            "schema_ref": "#/paths/~1v2~1space~1%7Bspace_id%7D~1list_template~1%7Btemplate_id%7D/post/responses/200/content/application~1json/schema",
+            "schema_ref": null,
             "schema_title": null
           },
           "400": {
@@ -3669,7 +3789,141 @@
       "request_schema": {
         "properties": {
           "features": {
-            "$ref": "#/paths/~1v2~1space~1%7Bspace_id%7D/put/requestBody/content/application~1json/schema/properties/features"
+            "properties": {
+              "checklists": {
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled"
+                ],
+                "title": "Checklists",
+                "type": "object"
+              },
+              "custom_fields": {
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled"
+                ],
+                "title": "CustomFields",
+                "type": "object"
+              },
+              "dependency_warning": {
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled"
+                ],
+                "title": "DependencyWarning",
+                "type": "object"
+              },
+              "due_dates": {
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "remap_closed_due_date": {
+                    "type": "boolean"
+                  },
+                  "remap_due_dates": {
+                    "type": "boolean"
+                  },
+                  "start_date": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled",
+                  "start_date",
+                  "remap_due_dates",
+                  "remap_closed_due_date"
+                ],
+                "title": "DueDates",
+                "type": "object"
+              },
+              "portfolios": {
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled"
+                ],
+                "title": "Portfolios",
+                "type": "object"
+              },
+              "remap_dependencies": {
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled"
+                ],
+                "title": "RemapDependencies",
+                "type": "object"
+              },
+              "tags": {
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled"
+                ],
+                "title": "Tags",
+                "type": "object"
+              },
+              "time_estimates": {
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled"
+                ],
+                "title": "TimeEstimates",
+                "type": "object"
+              },
+              "time_tracking": {
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled"
+                ],
+                "title": "TimeTracking",
+                "type": "object"
+              }
+            },
+            "required": [
+              "due_dates",
+              "time_tracking",
+              "tags",
+              "time_estimates",
+              "checklists",
+              "custom_fields",
+              "remap_dependencies",
+              "dependency_warning",
+              "portfolios"
+            ],
+            "title": "Features",
+            "type": "object"
           },
           "multiple_assignees": {
             "type": "boolean"
@@ -4187,7 +4441,24 @@
       "request_schema": {
         "properties": {
           "tag": {
-            "$ref": "#/paths/~1v2~1space~1%7Bspace_id%7D~1tag/post/requestBody/content/application~1json/schema/properties/tag"
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "tag_bg": {
+                "type": "string"
+              },
+              "tag_fg": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "tag_fg",
+              "tag_bg"
+            ],
+            "title": "Tag",
+            "type": "object"
           }
         },
         "required": [
@@ -6723,7 +6994,24 @@
         "properties": {
           "tags": {
             "items": {
-              "$ref": "#/paths/~1v2~1team~1%7Bteam_Id%7D~1time_entries/post/requestBody/content/application~1json/schema/properties/tags/items"
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "tag_bg": {
+                  "type": "string"
+                },
+                "tag_fg": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "tag_fg",
+                "tag_bg"
+              ],
+              "title": "Tags6",
+              "type": "object"
             },
             "type": "array"
           },
@@ -7432,7 +7720,16 @@
         "properties": {
           "tags": {
             "items": {
-              "$ref": "#/paths/~1v2~1team~1%7Bteam_Id%7D~1time_entries~1start/post/requestBody/content/application~1json/schema/properties/tags/items"
+              "properties": {
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "title": "Tags10",
+              "type": "object"
             },
             "type": "array"
           },
@@ -7668,7 +7965,24 @@
           },
           "tags": {
             "items": {
-              "$ref": "#/paths/~1v2~1team~1%7Bteam_Id%7D~1time_entries/post/requestBody/content/application~1json/schema/properties/tags/items"
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "tag_bg": {
+                  "type": "string"
+                },
+                "tag_fg": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "tag_fg",
+                "tag_bg"
+              ],
+              "title": "Tags6",
+              "type": "object"
             },
             "type": "array"
           },
@@ -8449,28 +8763,192 @@
       "request_schema": {
         "properties": {
           "columns": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/columns"
+            "properties": {
+              "fields": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "fields"
+            ],
+            "title": "Columns",
+            "type": "object"
           },
           "divide": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/divide"
+            "properties": {
+              "collapsed": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "dir": {
+                "type": [
+                  "null"
+                ]
+              },
+              "field": {
+                "type": [
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "collapsed"
+            ],
+            "title": "Divide",
+            "type": "object"
           },
           "filters": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/filters"
+            "properties": {
+              "fields": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "op": {
+                "type": "string"
+              },
+              "search": {
+                "type": "string"
+              },
+              "show_closed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "op",
+              "fields",
+              "search",
+              "show_closed"
+            ],
+            "title": "Filters",
+            "type": "object"
           },
           "grouping": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/grouping"
+            "properties": {
+              "collapsed": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "dir": {
+                "contentEncoding": "int32",
+                "type": "integer"
+              },
+              "field": {
+                "type": "string"
+              },
+              "ignore": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "field",
+              "dir",
+              "collapsed",
+              "ignore"
+            ],
+            "title": "Grouping",
+            "type": "object"
           },
           "name": {
             "type": "string"
           },
           "settings": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/settings"
+            "properties": {
+              "collapse_empty_columns": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "me_checklists": {
+                "type": "boolean"
+              },
+              "me_comments": {
+                "type": "boolean"
+              },
+              "me_subtasks": {
+                "type": "boolean"
+              },
+              "show_assignees": {
+                "type": "boolean"
+              },
+              "show_closed_subtasks": {
+                "type": "boolean"
+              },
+              "show_images": {
+                "type": "boolean"
+              },
+              "show_subtask_parent_names": {
+                "type": "boolean"
+              },
+              "show_subtasks": {
+                "contentEncoding": "int32",
+                "type": "integer"
+              },
+              "show_task_locations": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "show_task_locations",
+              "show_subtasks",
+              "show_subtask_parent_names",
+              "show_closed_subtasks",
+              "show_assignees",
+              "show_images",
+              "collapse_empty_columns",
+              "me_comments",
+              "me_subtasks",
+              "me_checklists"
+            ],
+            "title": "Settings",
+            "type": "object"
           },
           "sorting": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/sorting"
+            "properties": {
+              "fields": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "fields"
+            ],
+            "title": "Sorting",
+            "type": "object"
           },
           "team_sidebar": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/team_sidebar"
+            "properties": {
+              "assigned_comments": {
+                "type": "boolean"
+              },
+              "assignees": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "unassigned_tasks": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "assignees",
+              "assigned_comments",
+              "unassigned_tasks"
+            ],
+            "title": "TeamSidebar",
+            "type": "object"
           },
           "type": {
             "type": "string"
@@ -8528,28 +9006,192 @@
       "request_schema": {
         "properties": {
           "columns": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/columns"
+            "properties": {
+              "fields": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "fields"
+            ],
+            "title": "Columns",
+            "type": "object"
           },
           "divide": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/divide"
+            "properties": {
+              "collapsed": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "dir": {
+                "type": [
+                  "null"
+                ]
+              },
+              "field": {
+                "type": [
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "collapsed"
+            ],
+            "title": "Divide",
+            "type": "object"
           },
           "filters": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/filters"
+            "properties": {
+              "fields": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "op": {
+                "type": "string"
+              },
+              "search": {
+                "type": "string"
+              },
+              "show_closed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "op",
+              "fields",
+              "search",
+              "show_closed"
+            ],
+            "title": "Filters",
+            "type": "object"
           },
           "grouping": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/grouping"
+            "properties": {
+              "collapsed": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "dir": {
+                "contentEncoding": "int32",
+                "type": "integer"
+              },
+              "field": {
+                "type": "string"
+              },
+              "ignore": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "field",
+              "dir",
+              "collapsed",
+              "ignore"
+            ],
+            "title": "Grouping",
+            "type": "object"
           },
           "name": {
             "type": "string"
           },
           "settings": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/settings"
+            "properties": {
+              "collapse_empty_columns": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "me_checklists": {
+                "type": "boolean"
+              },
+              "me_comments": {
+                "type": "boolean"
+              },
+              "me_subtasks": {
+                "type": "boolean"
+              },
+              "show_assignees": {
+                "type": "boolean"
+              },
+              "show_closed_subtasks": {
+                "type": "boolean"
+              },
+              "show_images": {
+                "type": "boolean"
+              },
+              "show_subtask_parent_names": {
+                "type": "boolean"
+              },
+              "show_subtasks": {
+                "contentEncoding": "int32",
+                "type": "integer"
+              },
+              "show_task_locations": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "show_task_locations",
+              "show_subtasks",
+              "show_subtask_parent_names",
+              "show_closed_subtasks",
+              "show_assignees",
+              "show_images",
+              "collapse_empty_columns",
+              "me_comments",
+              "me_subtasks",
+              "me_checklists"
+            ],
+            "title": "Settings",
+            "type": "object"
           },
           "sorting": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/sorting"
+            "properties": {
+              "fields": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "fields"
+            ],
+            "title": "Sorting",
+            "type": "object"
           },
           "team_sidebar": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/team_sidebar"
+            "properties": {
+              "assigned_comments": {
+                "type": "boolean"
+              },
+              "assignees": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "unassigned_tasks": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "assignees",
+              "assigned_comments",
+              "unassigned_tasks"
+            ],
+            "title": "TeamSidebar",
+            "type": "object"
           },
           "type": {
             "type": "string"
@@ -8607,28 +9249,192 @@
       "request_schema": {
         "properties": {
           "columns": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/columns"
+            "properties": {
+              "fields": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "fields"
+            ],
+            "title": "Columns",
+            "type": "object"
           },
           "divide": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/divide"
+            "properties": {
+              "collapsed": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "dir": {
+                "type": [
+                  "null"
+                ]
+              },
+              "field": {
+                "type": [
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "collapsed"
+            ],
+            "title": "Divide",
+            "type": "object"
           },
           "filters": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/filters"
+            "properties": {
+              "fields": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "op": {
+                "type": "string"
+              },
+              "search": {
+                "type": "string"
+              },
+              "show_closed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "op",
+              "fields",
+              "search",
+              "show_closed"
+            ],
+            "title": "Filters",
+            "type": "object"
           },
           "grouping": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/grouping"
+            "properties": {
+              "collapsed": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "dir": {
+                "contentEncoding": "int32",
+                "type": "integer"
+              },
+              "field": {
+                "type": "string"
+              },
+              "ignore": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "field",
+              "dir",
+              "collapsed",
+              "ignore"
+            ],
+            "title": "Grouping",
+            "type": "object"
           },
           "name": {
             "type": "string"
           },
           "settings": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/settings"
+            "properties": {
+              "collapse_empty_columns": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "me_checklists": {
+                "type": "boolean"
+              },
+              "me_comments": {
+                "type": "boolean"
+              },
+              "me_subtasks": {
+                "type": "boolean"
+              },
+              "show_assignees": {
+                "type": "boolean"
+              },
+              "show_closed_subtasks": {
+                "type": "boolean"
+              },
+              "show_images": {
+                "type": "boolean"
+              },
+              "show_subtask_parent_names": {
+                "type": "boolean"
+              },
+              "show_subtasks": {
+                "contentEncoding": "int32",
+                "type": "integer"
+              },
+              "show_task_locations": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "show_task_locations",
+              "show_subtasks",
+              "show_subtask_parent_names",
+              "show_closed_subtasks",
+              "show_assignees",
+              "show_images",
+              "collapse_empty_columns",
+              "me_comments",
+              "me_subtasks",
+              "me_checklists"
+            ],
+            "title": "Settings",
+            "type": "object"
           },
           "sorting": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/sorting"
+            "properties": {
+              "fields": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "fields"
+            ],
+            "title": "Sorting",
+            "type": "object"
           },
           "team_sidebar": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/team_sidebar"
+            "properties": {
+              "assigned_comments": {
+                "type": "boolean"
+              },
+              "assignees": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "unassigned_tasks": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "assignees",
+              "assigned_comments",
+              "unassigned_tasks"
+            ],
+            "title": "TeamSidebar",
+            "type": "object"
           },
           "type": {
             "type": "string"
@@ -8686,28 +9492,192 @@
       "request_schema": {
         "properties": {
           "columns": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/columns"
+            "properties": {
+              "fields": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "fields"
+            ],
+            "title": "Columns",
+            "type": "object"
           },
           "divide": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/divide"
+            "properties": {
+              "collapsed": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "dir": {
+                "type": [
+                  "null"
+                ]
+              },
+              "field": {
+                "type": [
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "collapsed"
+            ],
+            "title": "Divide",
+            "type": "object"
           },
           "filters": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/filters"
+            "properties": {
+              "fields": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "op": {
+                "type": "string"
+              },
+              "search": {
+                "type": "string"
+              },
+              "show_closed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "op",
+              "fields",
+              "search",
+              "show_closed"
+            ],
+            "title": "Filters",
+            "type": "object"
           },
           "grouping": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/grouping"
+            "properties": {
+              "collapsed": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "dir": {
+                "contentEncoding": "int32",
+                "type": "integer"
+              },
+              "field": {
+                "type": "string"
+              },
+              "ignore": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "field",
+              "dir",
+              "collapsed",
+              "ignore"
+            ],
+            "title": "Grouping",
+            "type": "object"
           },
           "name": {
             "type": "string"
           },
           "settings": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/settings"
+            "properties": {
+              "collapse_empty_columns": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "me_checklists": {
+                "type": "boolean"
+              },
+              "me_comments": {
+                "type": "boolean"
+              },
+              "me_subtasks": {
+                "type": "boolean"
+              },
+              "show_assignees": {
+                "type": "boolean"
+              },
+              "show_closed_subtasks": {
+                "type": "boolean"
+              },
+              "show_images": {
+                "type": "boolean"
+              },
+              "show_subtask_parent_names": {
+                "type": "boolean"
+              },
+              "show_subtasks": {
+                "contentEncoding": "int32",
+                "type": "integer"
+              },
+              "show_task_locations": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "show_task_locations",
+              "show_subtasks",
+              "show_subtask_parent_names",
+              "show_closed_subtasks",
+              "show_assignees",
+              "show_images",
+              "collapse_empty_columns",
+              "me_comments",
+              "me_subtasks",
+              "me_checklists"
+            ],
+            "title": "Settings",
+            "type": "object"
           },
           "sorting": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/sorting"
+            "properties": {
+              "fields": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "fields"
+            ],
+            "title": "Sorting",
+            "type": "object"
           },
           "team_sidebar": {
-            "$ref": "#/paths/~1v2~1view~1%7Bview_id%7D/put/requestBody/content/application~1json/schema/properties/team_sidebar"
+            "properties": {
+              "assigned_comments": {
+                "type": "boolean"
+              },
+              "assignees": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "unassigned_tasks": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "assignees",
+              "assigned_comments",
+              "unassigned_tasks"
+            ],
+            "title": "TeamSidebar",
+            "type": "object"
           },
           "type": {
             "type": "string"

@@ -196,5 +196,13 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     """Run the clickup-agent CLI."""
     parser = build_parser()
-    args = parser.parse_args(argv)
-    return int(args.func(args))
+    try:
+        args = parser.parse_args(argv)
+        return int(args.func(args))
+    except SystemExit as exc:
+        if isinstance(exc.code, int):
+            return exc.code
+        if exc.code is None:
+            return 0
+        print(str(exc.code))
+        return 2

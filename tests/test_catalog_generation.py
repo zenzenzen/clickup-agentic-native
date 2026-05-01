@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -40,7 +42,9 @@ def test_normalize_catalog_extracts_operations_and_toolchains() -> None:
                                 "schema": {
                                     "type": "object",
                                     "required": ["name"],
-                                    "properties": {"name": {"type": "string", "examples": ["Task"]}},
+                                    "properties": {
+                                        "name": {"$ref": "#/components/schemas/TaskName"},
+                                    },
                                     "examples": [{"name": "Task"}],
                                 }
                             }
@@ -55,6 +59,11 @@ def test_normalize_catalog_extracts_operations_and_toolchains() -> None:
                 }
             }
         },
+        "components": {
+            "schemas": {
+                "TaskName": {"type": "string", "examples": ["Task"]},
+            }
+        },
     }
 
     catalog = normalize_catalog(spec, "fixture")
@@ -65,9 +74,64 @@ def test_normalize_catalog_extracts_operations_and_toolchains() -> None:
     assert operation["is_write"] is True
     assert operation["parameters"][0]["name"] == "list_id"
     assert operation["request_schema"]["required"] == ["name"]
+    assert operation["request_schema"]["properties"]["name"] == {"type": "string"}
     assert "examples" not in operation["request_schema"]
     assert operation["response_schema"]["statuses"]["200"]["schema_title"] == "CreateTaskResponse"
     assert {toolchain["name"] for toolchain in catalog["toolchains"]} >= {"search", "create-task", "timer"}
+
+
+def test_normalize_catalog_rejects_external_refs() -> None:
+    spec = {
+        "info": {"version": "test"},
+        "paths": {
+            "/v2/test": {
+                "post": {
+                    "operationId": "CreateThing",
+                    "requestBody": {
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "https://example.com/schema.json#/Thing"}
+                            }
+                        }
+                    },
+                    "responses": {},
+                }
+            }
+        },
+    }
+
+    with pytest.raises(ValueError, match="External \\$ref"):
+        normalize_catalog(spec, "fixture")
+
+
+def test_normalize_catalog_rejects_cyclic_refs() -> None:
+    spec = {
+        "info": {"version": "test"},
+        "paths": {
+            "/v2/test": {
+                "post": {
+                    "operationId": "CreateThing",
+                    "requestBody": {
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/A"}
+                            }
+                        }
+                    },
+                    "responses": {},
+                }
+            }
+        },
+        "components": {
+            "schemas": {
+                "A": {"$ref": "#/components/schemas/B"},
+                "B": {"$ref": "#/components/schemas/A"},
+            }
+        },
+    }
+
+    with pytest.raises(ValueError, match="Cyclic local \\$ref"):
+        normalize_catalog(spec, "fixture")
 
 
 def test_committed_catalog_loads_required_toolchains() -> None:
@@ -77,3 +141,4 @@ def test_committed_catalog_loads_required_toolchains() -> None:
     assert catalog.get_operation("CreateTask").path == "/v2/list/{list_id}/task"
     assert catalog.get_operation("UpdateTask").request_schema is not None
     assert catalog.get_toolchain("create task").name == "create-task"
+    assert "$ref" not in (ROOT / "src/clickup_agent/catalog/tool_catalog.json").read_text(encoding="utf-8")

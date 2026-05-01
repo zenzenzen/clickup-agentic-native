@@ -31,3 +31,13 @@ def test_hotkeys_list_json_includes_curated_toolchains(capsys) -> None:
     names = {hotkey["name"] for hotkey in payload["hotkeys"]}
 
     assert {"search", "create-task", "set-status", "assign", "set-due-date", "comment", "tags", "timer"} <= names
+
+
+def test_run_tool_specific_help_shows_selected_flags(capsys) -> None:
+    assert main(["run", "create-task", "--help"]) == 0
+
+    output = capsys.readouterr().out
+
+    assert "--list-id" in output
+    assert "--name" in output
+    assert "--dry-run" in output

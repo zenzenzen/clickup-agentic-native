@@ -62,6 +62,12 @@ def load_config(env_file: str | None = None) -> ClickUpConfig:
     )
 
 
+def load_workspace_id(env_file: str | None = None) -> str | None:
+    selected_env_file = env_file or os.getenv("CLICKUP_ENV_FILE")
+    load_env_file(selected_env_file)
+    return os.getenv("CLICKUP_WORKSPACE_ID") or None
+
+
 def redact_secret(value: str, secret: str | None) -> str:
     if not secret:
         return value

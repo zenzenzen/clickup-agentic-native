@@ -82,6 +82,9 @@ def build_operation_request(operation: ToolOperation, payload: dict[str, Any]) -
         raise OperationInputError(f"Unresolved path parameters for {operation.operation_id}: {path}")
 
     json_body = _extract_body(operation, explicit_body, values)
+    if values:
+        unknown = ", ".join(sorted(values))
+        raise OperationInputError(f"Unknown input field(s) for {operation.operation_id}: {unknown}")
     return OperationRequest(
         operation_id=operation.operation_id,
         method=operation.method,
@@ -108,4 +111,7 @@ def _extract_body(
         return None
 
     body = {key: remaining_values.pop(key) for key in list(remaining_values) if key in properties}
-    return body or None
+    required = schema.get("required")
+    if body or (isinstance(required, list) and required):
+        return body
+    return None

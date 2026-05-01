@@ -4,13 +4,21 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
-from datetime import date, datetime, time, timezone
 from typing import Any, Callable
 
-from .client import ClickUpClient
+from .client import ClickUpApiError, ClickUpClient
+from .config import ConfigError, load_workspace_id
 from .registry import ToolCatalog, load_catalog, normalize_tool_name
 from .requests import OperationInputError, OperationRequest, build_operation_request
-from .validation import InputValidationError, merge_inputs, parse_json_object
+from .validation import (
+    InputValidationError,
+    coerce_bool,
+    coerce_epoch_millis_date,
+    coerce_int,
+    merge_inputs,
+    parse_json_object,
+    require_keys,
+)
 
 
 class ToolchainError(RuntimeError):
@@ -57,10 +65,10 @@ class ToolchainRunner:
         self,
         catalog: ToolCatalog | None = None,
         *,
-        client_factory: ClientFactory = ClickUpClient.from_environment,
+        client_factory: ClientFactory | None = None,
     ) -> None:
         self.catalog = catalog or load_catalog()
-        self.client_factory = client_factory
+        self.client_factory = client_factory or ClickUpClient.from_environment
         self.handlers: dict[str, ToolchainHandler] = {
             "search": _run_search,
             "create-task": _run_create_task,
@@ -78,10 +86,15 @@ class ToolchainRunner:
         handler = self.handlers.get(normalized)
         if handler is None:
             raise ToolchainError(f"Toolchain is not implemented yet: {normalized}")
+        if any(item in {"-h", "--help"} for item in options.flag_payload.get("_argv", [])):
+            return handler(options, self.catalog, None)
 
         client: ClickUpClient | None = None
         if not options.dry_run:
-            client = self.client_factory(options.env_file)
+            try:
+                client = self.client_factory(options.env_file)
+            except ConfigError as exc:
+                raise ToolchainError(str(exc)) from exc
         try:
             return handler(options, self.catalog, client)
         finally:
@@ -89,10 +102,8 @@ class ToolchainRunner:
                 client.close()
 
     def _parse_common(self, name: str, argv: list[str]) -> RunOptions:
-        parser = argparse.ArgumentParser(prog=f"clickup-agent run {name}")
-        parser.add_argument("--json", dest="json_payload", help="JSON object with toolchain inputs.")
-        parser.add_argument("--dry-run", action="store_true", help="Preview resolved operations without calling ClickUp.")
-        parser.add_argument("--env-file", help="Path to a local env file such as .env.local.")
+        parser = argparse.ArgumentParser(prog=f"clickup-agent run {name}", add_help=False)
+        _add_common_run_arguments(parser)
         known, remaining = parser.parse_known_args(argv)
         try:
             json_payload = parse_json_object(known.json_payload)
@@ -102,7 +113,7 @@ class ToolchainRunner:
             name=name,
             json_payload=json_payload,
             flag_payload={"_argv": remaining},
-            dry_run=known.dry_run,
+            dry_run=bool(known.dry_run),
             env_file=known.env_file,
         )
 
@@ -112,7 +123,20 @@ def run_toolchain(name: str, argv: list[str]) -> RunResult:
 
 
 def _argument_parser(name: str) -> argparse.ArgumentParser:
-    return argparse.ArgumentParser(prog=f"clickup-agent run {name}", add_help=True)
+    parser = argparse.ArgumentParser(prog=f"clickup-agent run {name}", add_help=True)
+    _add_common_run_arguments(parser)
+    return parser
+
+
+def _add_common_run_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--json", dest="json_payload", help="JSON object with toolchain inputs.")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=None,
+        help="Preview resolved operations without calling ClickUp.",
+    )
+    parser.add_argument("--env-file", help="Path to a local env file such as .env.local.")
 
 
 def _parse_tool_args(name: str, argv: list[str], configure: Callable[[argparse.ArgumentParser], None]) -> dict[str, Any]:
@@ -135,7 +159,7 @@ def _execute_operation(
         request = build_operation_request(operation, payload)
     except OperationInputError as exc:
         raise ToolchainError(str(exc)) from exc
-    if request.json_body is not None:
+    if request.json_body is not None or operation.request_schema is not None:
         try:
             from .validation import validate_operation_body
 
@@ -148,18 +172,45 @@ def _execute_operation(
         return dry_run_payload, None
     if client is None:
         raise ToolchainError("Live execution requires a ClickUp client")
-    return dry_run_payload, client.request(
-        request.method,
-        request.path,
-        params=request.params,
-        json_body=request.json_body,
-        headers=request.headers,
-    )
+    try:
+        response = client.request(
+            request.method,
+            request.path,
+            params=request.params,
+            json_body=request.json_body,
+            headers=request.headers,
+        )
+    except ClickUpApiError as exc:
+        raise ToolchainError(str(exc)) from exc
+    return dry_run_payload, response
 
 
-def _date_to_epoch_millis(value: str) -> int:
-    parsed = date.fromisoformat(value)
-    return int(datetime.combine(parsed, time.min, tzinfo=timezone.utc).timestamp() * 1000)
+def _date_to_epoch_millis(value: Any, *, field: str) -> int:
+    try:
+        return coerce_epoch_millis_date(value, field=field)
+    except InputValidationError as exc:
+        raise ToolchainError(str(exc)) from exc
+
+
+def _int(value: Any, *, field: str) -> int:
+    try:
+        return coerce_int(value, field=field)
+    except InputValidationError as exc:
+        raise ToolchainError(str(exc)) from exc
+
+
+def _bool(value: Any, *, field: str) -> bool:
+    try:
+        return coerce_bool(value, field=field)
+    except InputValidationError as exc:
+        raise ToolchainError(str(exc)) from exc
+
+
+def _require(payload: dict[str, Any], keys: list[str], *, context: str) -> None:
+    try:
+        require_keys(payload, keys, context=context)
+    except InputValidationError as exc:
+        raise ToolchainError(str(exc)) from exc
 
 
 def _csv_or_list(value: Any) -> list[Any]:
@@ -179,11 +230,15 @@ def _run_search(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient
     list_id = payload.get("list_id")
     operation_id = "GetTasks" if list_id else "GetFilteredTeamTasks"
     if operation_id == "GetFilteredTeamTasks":
-        workspace_id = payload.pop("workspace_id", None) or payload.get("team_id")
+        workspace_id = payload.pop("workspace_id", None) or payload.pop("team_id", None)
         if workspace_id:
             payload["team_Id"] = workspace_id
         elif client and client.config.workspace_id:
             payload["team_Id"] = client.config.workspace_id
+        else:
+            workspace_id = load_workspace_id(options.env_file)
+            if workspace_id:
+                payload["team_Id"] = workspace_id
 
     operation, response = _execute_operation(catalog, operation_id, payload, dry_run=options.dry_run, client=client)
     if options.dry_run:
@@ -230,10 +285,11 @@ def _task_matches_query(task: Any, query: str) -> bool:
 def _run_create_task(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
     flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_create_task)
     payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["list_id"], context="create-task")
     if "due_date_iso" in payload:
-        payload["due_date"] = _date_to_epoch_millis(str(payload.pop("due_date_iso")))
+        payload["due_date"] = _date_to_epoch_millis(payload.pop("due_date_iso"), field="due_date")
     if "assignees" in payload:
-        payload["assignees"] = [int(item) for item in _csv_or_list(payload["assignees"])]
+        payload["assignees"] = [_int(item, field="assignees") for item in _csv_or_list(payload["assignees"])]
     if "tags" in payload:
         payload["tags"] = [str(item) for item in _csv_or_list(payload["tags"])]
 
@@ -254,6 +310,7 @@ def _configure_create_task(parser: argparse.ArgumentParser) -> None:
 def _run_set_status(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
     flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_set_status)
     payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["task_id", "status"], context="set-status")
     payload["body"] = {"status": payload.pop("status")}
     operation, response = _execute_operation(catalog, "UpdateTask", payload, dry_run=options.dry_run, client=client)
     return RunResult(options.name, options.dry_run, [operation], response)
@@ -261,7 +318,7 @@ def _run_set_status(options: RunOptions, catalog: ToolCatalog, client: ClickUpCl
 
 def _configure_set_status(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--task-id", required=False)
-    parser.add_argument("--status", required=True)
+    parser.add_argument("--status")
     parser.add_argument("--custom-task-ids", action="store_true", default=None)
     parser.add_argument("--team-id")
 
@@ -269,9 +326,10 @@ def _configure_set_status(parser: argparse.ArgumentParser) -> None:
 def _run_set_due_date(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
     flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_set_due_date)
     payload = merge_inputs(options.json_payload, flag_payload)
-    body: dict[str, Any] = {"due_date": _date_to_epoch_millis(str(payload.pop("due_date_iso")))}
+    _require(payload, ["task_id", "due_date_iso"], context="set-due-date")
+    body: dict[str, Any] = {"due_date": _date_to_epoch_millis(payload.pop("due_date_iso"), field="due_date")}
     if "due_date_time" in payload:
-        body["due_date_time"] = bool(payload.pop("due_date_time"))
+        body["due_date_time"] = _bool(payload.pop("due_date_time"), field="due_date_time")
     payload["body"] = body
     operation, response = _execute_operation(catalog, "UpdateTask", payload, dry_run=options.dry_run, client=client)
     return RunResult(options.name, options.dry_run, [operation], response)
@@ -279,7 +337,7 @@ def _run_set_due_date(options: RunOptions, catalog: ToolCatalog, client: ClickUp
 
 def _configure_set_due_date(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--task-id", required=False)
-    parser.add_argument("--due-date", dest="due_date_iso", required=True)
+    parser.add_argument("--due-date", dest="due_date_iso")
     parser.add_argument("--due-date-time", action="store_true", default=None)
     parser.add_argument("--custom-task-ids", action="store_true", default=None)
     parser.add_argument("--team-id")
@@ -288,8 +346,9 @@ def _configure_set_due_date(parser: argparse.ArgumentParser) -> None:
 def _run_assign(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
     flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_assign)
     payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["task_id"], context="assign")
     mode = str(payload.pop("mode", "add"))
-    assignee_ids = [int(item) for item in _csv_or_list(payload.pop("assignees", []))]
+    assignee_ids = [_int(item, field="assignees") for item in _csv_or_list(payload.pop("assignees", []))]
     if not assignee_ids:
         raise ToolchainError("assign requires at least one --assignee or assignees JSON value")
 
@@ -315,8 +374,6 @@ def _run_assign(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient
                 "rem": [item for item in remove_ids if item not in assignee_ids],
             }
         }
-        if options.dry_run:
-            body["replace_note"] = "Live run removes current assignees not in the requested replacement set."
     elif mode == "remove":
         body = {"assignees": {"add": [], "rem": assignee_ids}}
     elif mode == "add":
@@ -326,6 +383,8 @@ def _run_assign(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient
 
     payload["body"] = body
     update_operation, response = _execute_operation(catalog, "UpdateTask", payload, dry_run=options.dry_run, client=client)
+    if options.dry_run and mode == "replace":
+        update_operation["note"] = "Live run removes current assignees not in the requested replacement set."
     operations.append(update_operation)
     return RunResult(options.name, options.dry_run, operations, response)
 
@@ -347,7 +406,7 @@ def _current_assignee_ids(response: Any) -> list[int]:
     ids: list[int] = []
     for assignee in assignees:
         if isinstance(assignee, dict) and "id" in assignee:
-            ids.append(int(assignee["id"]))
+            ids.append(_int(assignee["id"], field="assignee id"))
         elif isinstance(assignee, int):
             ids.append(assignee)
     return ids
@@ -356,12 +415,13 @@ def _current_assignee_ids(response: Any) -> list[int]:
 def _run_comment(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
     flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_comment)
     payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["task_id", "text"], context="comment")
     body = {
         "comment_text": payload.pop("text"),
-        "notify_all": bool(payload.pop("notify_all", False)),
+        "notify_all": _bool(payload.pop("notify_all", False), field="notify_all"),
     }
     if "assignee" in payload:
-        body["assignee"] = int(payload.pop("assignee"))
+        body["assignee"] = _int(payload.pop("assignee"), field="assignee")
     if "group_assignee" in payload:
         body["group_assignee"] = payload.pop("group_assignee")
     payload["body"] = body
@@ -371,7 +431,7 @@ def _run_comment(options: RunOptions, catalog: ToolCatalog, client: ClickUpClien
 
 def _configure_comment(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--task-id", required=False)
-    parser.add_argument("--text", required=True)
+    parser.add_argument("--text")
     parser.add_argument("--notify-all", action="store_true", default=None)
     parser.add_argument("--assignee")
     parser.add_argument("--group-assignee")
@@ -382,6 +442,7 @@ def _configure_comment(parser: argparse.ArgumentParser) -> None:
 def _run_tags(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
     flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_tags)
     payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["task_id"], context="tags")
     adds = [str(item) for item in _csv_or_list(payload.pop("add", []))]
     removes = [str(item) for item in _csv_or_list(payload.pop("remove", []))]
     if not adds and not removes:
@@ -433,6 +494,8 @@ def _run_timer(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient 
     if not workspace_id and client and client.config.workspace_id:
         workspace_id = client.config.workspace_id
     if not workspace_id:
+        workspace_id = load_workspace_id(options.env_file)
+    if not workspace_id:
         raise ToolchainError("timer requires --team-id, --workspace-id, or CLICKUP_WORKSPACE_ID")
 
     if action == "current":
@@ -467,7 +530,7 @@ def _run_timer(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient 
         if "tags" in payload:
             body["tags"] = [{"name": str(item)} for item in _csv_or_list(payload.pop("tags"))]
         if "billable" in payload:
-            body["billable"] = bool(payload.pop("billable"))
+            body["billable"] = _bool(payload.pop("billable"), field="billable")
         operation_payload = {
             "team_Id": workspace_id,
             "body": body,

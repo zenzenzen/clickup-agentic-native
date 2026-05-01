@@ -8,6 +8,7 @@ import json
 import re
 import sys
 import urllib.request
+from urllib.parse import unquote
 from pathlib import Path
 from typing import Any
 
@@ -86,6 +87,42 @@ def tool_name(operation_id: str) -> str:
     return cleaned.lower()
 
 
+def _decode_pointer_token(token: str) -> str:
+    return unquote(token).replace("~1", "/").replace("~0", "~")
+
+
+def _resolve_pointer(document: dict[str, Any], ref: str) -> Any:
+    if not ref.startswith("#/"):
+        raise ValueError(f"External $ref is not supported: {ref}")
+    current: Any = document
+    for raw_token in ref[2:].split("/"):
+        token = _decode_pointer_token(raw_token)
+        if not isinstance(current, dict) or token not in current:
+            raise ValueError(f"Unresolvable local $ref: {ref}")
+        current = current[token]
+    return current
+
+
+def resolve_local_refs(value: Any, document: dict[str, Any], stack: tuple[str, ...] = ()) -> Any:
+    if isinstance(value, list):
+        return [resolve_local_refs(item, document, stack) for item in value]
+    if not isinstance(value, dict):
+        return value
+    ref = value.get("$ref")
+    if isinstance(ref, str):
+        if ref in stack:
+            cycle = " -> ".join((*stack, ref))
+            raise ValueError(f"Cyclic local $ref detected: {cycle}")
+        resolved = resolve_local_refs(_resolve_pointer(document, ref), document, (*stack, ref))
+        if not isinstance(resolved, dict):
+            return resolved
+        siblings = {key: item for key, item in value.items() if key != "$ref"}
+        if not siblings:
+            return resolved
+        return resolve_local_refs({**resolved, **siblings}, document, stack)
+    return {key: resolve_local_refs(item, document, stack) for key, item in value.items()}
+
+
 def compact_schema(schema: dict[str, Any] | None) -> dict[str, Any] | None:
     if not schema:
         return None
@@ -126,9 +163,11 @@ def compact_schema(schema: dict[str, Any] | None) -> dict[str, Any] | None:
     return compact or None
 
 
-def request_schema(operation: dict[str, Any]) -> dict[str, Any] | None:
+def request_schema(operation: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any] | None:
     content = operation.get("requestBody", {}).get("content", {})
     schema = content.get("application/json", {}).get("schema")
+    if isinstance(schema, dict):
+        schema = resolve_local_refs(schema, spec)
     return compact_schema(schema)
 
 
@@ -141,17 +180,20 @@ def response_schema(operation: dict[str, Any]) -> dict[str, Any] | None:
             "description": response.get("description", "") if isinstance(response, dict) else "",
             "content_types": sorted(content),
             "schema_title": json_schema.get("title"),
-            "schema_ref": json_schema.get("$ref"),
+            "schema_ref": None,
         }
     return {"statuses": statuses} if statuses else None
 
 
-def normalize_parameter(parameter: dict[str, Any]) -> dict[str, Any]:
+def normalize_parameter(parameter: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
+    schema = parameter.get("schema") or {}
+    if isinstance(schema, dict):
+        schema = resolve_local_refs(schema, spec)
     return {
         "name": parameter["name"],
         "location": parameter["in"],
         "required": bool(parameter.get("required", False)),
-        "schema": compact_schema(parameter.get("schema") or {}) or {},
+        "schema": compact_schema(schema) or {},
         "description": parameter.get("description", ""),
     }
 
@@ -174,11 +216,11 @@ def normalize_catalog(spec: dict[str, Any], source_url: str) -> dict[str, Any]:
                     "path": path,
                     "tags": operation.get("tags", []),
                     "parameters": [
-                        normalize_parameter(parameter)
+                        normalize_parameter(parameter, spec)
                         for parameter in operation.get("parameters", [])
                         if parameter.get("in") in {"path", "query", "header"} and parameter.get("name")
                     ],
-                    "request_schema": request_schema(operation),
+                    "request_schema": request_schema(operation, spec),
                     "response_schema": response_schema(operation),
                     "is_write": method in WRITE_METHODS,
                 }
