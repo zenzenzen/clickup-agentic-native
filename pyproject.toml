@@ -20,3 +20,6 @@ clickup-agent = "clickup_agent.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+clickup_agent = ["catalog/*.json"]
