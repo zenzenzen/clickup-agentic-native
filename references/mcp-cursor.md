@@ -58,4 +58,7 @@ Choose project config or global config when prompted. The installer preserves ex
 - Confirm `clickup-agent` resolves on PATH with `command -v clickup-agent`.
 - Confirm the env file path exists and does not expose token values in tracked files.
 - Run `clickup-agent doctor --env-file /absolute/path/to/.env.local`.
-- The current MCP server exposes bootstrap/status tools; full ClickUp API tools are planned.
+- Run `clickup-agent doctor --env-file /absolute/path/to/.env.local --live-auth` to confirm token and workspace access with read-only ClickUp API calls.
+- The current MCP server exposes bootstrap/status tools and direct wrappers for the first curated run toolchains.
+- Write wrappers return dry-run previews by default; pass `live: true` only when the action should call ClickUp.
+- Broader ClickUp API coverage for docs, chat, attachments, admin workflows, and richer entity resolution is still planned.

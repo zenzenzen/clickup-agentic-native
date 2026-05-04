@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "clickup-agentic-native"
-version = "0.1.0"
+version = "0.1.1"
 description = "Agentic native ClickUp tooling exposed through the clickup-agent command."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -12,6 +12,8 @@ license = { file = "LICENSE" }
 authors = [{ name = "zenzenzen" }]
 keywords = ["clickup", "agent", "mcp", "llm", "workflow"]
 dependencies = [
+  "httpx>=0.28.1,<1",
+  "jsonschema>=4.26.0,<5",
   "mcp>=1.2.0,<2",
 ]
 
@@ -20,3 +22,11 @@ clickup-agent = "clickup_agent.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+clickup_agent = ["catalog/*.json"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]

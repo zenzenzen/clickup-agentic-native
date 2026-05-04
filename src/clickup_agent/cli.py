@@ -7,30 +7,25 @@ tool registry, and MCP server are implemented behind them.
 from __future__ import annotations
 
 import argparse
+import json
 import os
-from pathlib import Path
 
 from . import __version__
+from .client import ClickUpApiError, ClickUpClient
+from .config import load_env_file
+from .registry import ToolOperation, load_catalog
+from .toolchains import ToolchainError, run_toolchain
 
 
 def _load_env_file(path: str | None) -> None:
     """Load simple KEY=VALUE pairs without adding a runtime dependency yet."""
-    if not path:
-        return
-    env_path = Path(path).expanduser()
-    if not env_path.exists():
-        return
-    for line in env_path.read_text(encoding="utf-8").splitlines():
-        cleaned = line.strip()
-        if not cleaned or cleaned.startswith("#") or "=" not in cleaned:
-            continue
-        key, value = cleaned.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+    load_env_file(path)
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
     """Check local configuration for the future agent runtime."""
-    _load_env_file(args.env_file or os.getenv("CLICKUP_ENV_FILE"))
+    env_file = args.env_file or os.getenv("CLICKUP_ENV_FILE")
+    _load_env_file(env_file)
     has_key = bool(os.getenv("CLICKUP_API_KEY"))
     has_workspace = bool(os.getenv("CLICKUP_WORKSPACE_ID"))
     has_webhook_secret = bool(os.getenv("CLICKUP_WEBHOOK_SECRET"))
@@ -41,6 +36,37 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     if not has_key:
         print("Create .env.local from .env.example, then set CLICKUP_API_KEY.")
         return 1
+    if args.live_auth:
+        return _run_live_auth_check(env_file)
+    return 0
+
+
+def _run_live_auth_check(env_file: str | None) -> int:
+    """Probe read-only ClickUp endpoints without printing secret values."""
+    try:
+        with ClickUpClient.from_environment(env_file) as client:
+            user_response = client.request("GET", "/v2/user")
+            teams_response = client.request("GET", "/v2/team")
+    except ClickUpApiError as exc:
+        print(f"ClickUp live auth: failed - {exc}")
+        return 2
+
+    user = user_response.get("user") if isinstance(user_response, dict) else None
+    teams = teams_response.get("teams") if isinstance(teams_response, dict) else None
+    team_list = teams if isinstance(teams, list) else []
+    workspace_id = os.getenv("CLICKUP_WORKSPACE_ID")
+    workspace_authorized = (
+        any(isinstance(team, dict) and str(team.get("id")) == workspace_id for team in team_list)
+        if workspace_id
+        else None
+    )
+
+    print(f"ClickUp /v2/user: {'authorized' if isinstance(user, dict) else 'unexpected response'}")
+    print(f"ClickUp /v2/team: authorized ({len(team_list)} team(s))")
+    if workspace_authorized is not None:
+        print(f"CLICKUP_WORKSPACE_ID authorization: {'authorized' if workspace_authorized else 'not found'}")
+        if not workspace_authorized:
+            return 2
     return 0
 
 
@@ -62,6 +88,106 @@ def _cmd_mcp(_: argparse.Namespace) -> int:
     return 0
 
 
+def _print_json(data: object) -> None:
+    print(json.dumps(data, indent=2, sort_keys=True))
+
+
+def _print_table(rows: list[dict[str, object]], columns: list[tuple[str, str]]) -> None:
+    if not rows:
+        print("No results.")
+        return
+    widths = {
+        key: max(len(label), *(len(str(row.get(key, ""))) for row in rows))
+        for key, label in columns
+    }
+    print("  ".join(label.ljust(widths[key]) for key, label in columns))
+    print("  ".join("-" * widths[key] for key, _ in columns))
+    for row in rows:
+        print("  ".join(str(row.get(key, "")).ljust(widths[key]) for key, _ in columns))
+
+
+def _operation_row(operation: ToolOperation) -> dict[str, object]:
+    return {
+        "name": operation.name,
+        "operation_id": operation.operation_id,
+        "method": operation.method,
+        "path": operation.path,
+        "tags": ",".join(operation.tags),
+        "write": operation.is_write,
+        "summary": operation.summary,
+    }
+
+
+def _cmd_tools_list(args: argparse.Namespace) -> int:
+    catalog = load_catalog()
+    rows = [_operation_row(operation) for operation in catalog.list_operations(tag=args.tag, write_only=args.write_only)]
+    if args.format == "json":
+        _print_json(
+            {
+                "source": catalog.source,
+                "source_version": catalog.source_version,
+                "count": len(rows),
+                "tools": rows,
+            }
+        )
+        return 0
+    _print_table(
+        rows,
+        [
+            ("name", "Name"),
+            ("method", "Method"),
+            ("path", "Path"),
+            ("tags", "Tags"),
+            ("write", "Write"),
+            ("summary", "Summary"),
+        ],
+    )
+    return 0
+
+
+def _cmd_hotkeys_list(args: argparse.Namespace) -> int:
+    catalog = load_catalog()
+    rows = [
+        {
+            "name": toolchain.name,
+            "operations": ",".join(toolchain.operation_ids),
+            "write": toolchain.is_write,
+            "summary": toolchain.summary,
+        }
+        for toolchain in catalog.toolchains
+    ]
+    if args.format == "json":
+        _print_json(
+            {
+                "source": catalog.source,
+                "source_version": catalog.source_version,
+                "count": len(rows),
+                "hotkeys": rows,
+            }
+        )
+        return 0
+    _print_table(
+        rows,
+        [
+            ("name", "Name"),
+            ("operations", "Operations"),
+            ("write", "Write"),
+            ("summary", "Summary"),
+        ],
+    )
+    return 0
+
+
+def _cmd_run(args: argparse.Namespace) -> int:
+    try:
+        result = run_toolchain(args.name, args.tool_args)
+    except ToolchainError as exc:
+        print(str(exc))
+        return 2
+    _print_json(result.to_dict())
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the command parser shared by console script and module entrypoint."""
     parser = argparse.ArgumentParser(prog="clickup-agent")
@@ -70,6 +196,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor = subcommands.add_parser("doctor", help="Check local ClickUp agent configuration.")
     doctor.add_argument("--env-file", help="Path to a local env file such as .env.local.")
+    doctor.add_argument(
+        "--live-auth",
+        action="store_true",
+        help="Call read-only ClickUp auth endpoints and report redacted authorization status.",
+    )
     doctor.set_defaults(func=_cmd_doctor)
 
     chat = subcommands.add_parser("chat", help="Start the future interactive ClickUp agent.")
@@ -81,16 +212,21 @@ def build_parser() -> argparse.ArgumentParser:
     tools = subcommands.add_parser("tools", help="Inspect future ClickUp tools.")
     tools_subcommands = tools.add_subparsers(dest="tools_command", required=True)
     tools_list = tools_subcommands.add_parser("list", help="List future ClickUp tools.")
-    tools_list.set_defaults(func=_cmd_placeholder("tools list", "generated and curated tool discovery"))
+    tools_list.add_argument("--format", choices=["table", "json"], default="table", help="Output format.")
+    tools_list.add_argument("--tag", help="Filter operations by an OpenAPI tag such as Tasks.")
+    tools_list.add_argument("--write-only", action="store_true", help="Only show operations that can mutate ClickUp.")
+    tools_list.set_defaults(func=_cmd_tools_list)
 
     hotkeys = subcommands.add_parser("hotkeys", help="Inspect future hotkey toolchains.")
     hotkeys_subcommands = hotkeys.add_subparsers(dest="hotkeys_command", required=True)
     hotkeys_list = hotkeys_subcommands.add_parser("list", help="List future hotkey toolchains.")
-    hotkeys_list.set_defaults(func=_cmd_placeholder("hotkeys list", "ClickUp-inspired workflow shortcuts"))
+    hotkeys_list.add_argument("--format", choices=["table", "json"], default="table", help="Output format.")
+    hotkeys_list.set_defaults(func=_cmd_hotkeys_list)
 
     run = subcommands.add_parser("run", help="Run a future hotkey or toolchain.")
     run.add_argument("name", help="Hotkey or toolchain name.")
-    run.set_defaults(func=_cmd_placeholder("run", "executing named ClickUp toolchains"))
+    run.add_argument("tool_args", nargs=argparse.REMAINDER, help="Toolchain-specific flags.")
+    run.set_defaults(func=_cmd_run)
 
     return parser
 
@@ -98,5 +234,13 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     """Run the clickup-agent CLI."""
     parser = build_parser()
-    args = parser.parse_args(argv)
-    return int(args.func(args))
+    try:
+        args = parser.parse_args(argv)
+        return int(args.func(args))
+    except SystemExit as exc:
+        if isinstance(exc.code, int):
+            return exc.code
+        if exc.code is None:
+            return 0
+        print(str(exc.code))
+        return 2
