@@ -13,7 +13,7 @@ Prefer existing commands before inventing setup steps:
 
 ```bash
 clickup-agent --version
-clickup-agent doctor --env-file .env.local
+clickup-agent doctor --env-file .env.local --live-auth
 uv tool install . --python 3.12 --reinstall
 bash scripts/install.sh
 clickup-agent mcp
@@ -27,6 +27,7 @@ If working from the repo, use the repo root as the working directory. If `clicku
 - Never paste a real ClickUp token into tracked files, docs, examples, Git commits, or chat summaries.
 - MCP/Cursor config should point to `CLICKUP_ENV_FILE`; it must not contain the token itself.
 - Use `clickup-agent doctor --env-file .env.local` to report configured/missing status without revealing values.
+- Use `clickup-agent doctor --env-file .env.local --live-auth` when you need a safe read-only token/workspace authorization check.
 
 ## Common Workflows
 
@@ -39,7 +40,7 @@ If working from the repo, use the repo root as the working directory. If `clicku
 
 ## Current Truth
 
-Implemented today: Python 3.12 CLI, generated ClickUp V2 tool catalog, `tools list`, `hotkeys list`, first `run` toolchains, `doctor`, interactive installer, MCP bootstrap server, Cursor MCP config support, and skill installation.
+Implemented today: Python 3.12 CLI, generated ClickUp V2 tool catalog, `tools list`, `hotkeys list`, first `run` toolchains, `doctor --live-auth`, MCP bootstrap/status tools, direct MCP wrappers for the first run toolchains, Cursor MCP config support, and skill installation.
 
 Planned: broader ClickUp API workflows for docs, users, guests, user groups, lists, attachments, webhooks, admin surfaces, richer entity resolution, and expanded hotkey toolchains.
 
@@ -54,4 +55,5 @@ clickup-agent --version
 clickup-agent tools list --format json
 clickup-agent hotkeys list
 clickup-agent doctor --env-file .env.example || true
+clickup-agent run create-task --dry-run --list-id 123 --name "Smoke test"
 ```

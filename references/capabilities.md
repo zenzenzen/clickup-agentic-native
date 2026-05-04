@@ -6,6 +6,7 @@ Use this when explaining what the agent can do today versus what is planned.
 
 - `clickup-agent --version`
 - `clickup-agent doctor --env-file <path>`
+- `clickup-agent doctor --env-file <path> --live-auth`
 - `clickup-agent mcp`
 - Generated ClickUp V2 OpenAPI catalog with 137 normalized operations
 - `clickup-agent tools list [--format table|json] [--tag <tag>] [--write-only]`
@@ -25,6 +26,15 @@ Use this when explaining what the agent can do today versus what is planned.
 - Bootstrap MCP tools:
   - `clickup_agent_status`
   - `clickup_agent_tooling_plan`
+- Direct MCP tools:
+  - `clickup_agent_search`
+  - `clickup_agent_create_task`
+  - `clickup_agent_set_status`
+  - `clickup_agent_assign`
+  - `clickup_agent_set_due_date`
+  - `clickup_agent_comment`
+  - `clickup_agent_tags`
+  - `clickup_agent_timer`
 
 ## CLI Command Shape
 
@@ -39,7 +49,7 @@ clickup-agent doctor
 clickup-agent mcp
 ```
 
-`chat` remains a placeholder. The discovery and first `run` commands execute real generated or curated toolchains.
+`chat` remains a placeholder. The discovery commands, first `run` commands, and direct MCP wrappers execute real generated or curated toolchains. MCP write wrappers default to dry-run unless the caller explicitly sets `live` to true.
 
 ## Generated Toolsets
 

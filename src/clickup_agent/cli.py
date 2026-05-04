@@ -11,6 +11,7 @@ import json
 import os
 
 from . import __version__
+from .client import ClickUpApiError, ClickUpClient
 from .config import load_env_file
 from .registry import ToolOperation, load_catalog
 from .toolchains import ToolchainError, run_toolchain
@@ -23,7 +24,8 @@ def _load_env_file(path: str | None) -> None:
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
     """Check local configuration for the future agent runtime."""
-    _load_env_file(args.env_file or os.getenv("CLICKUP_ENV_FILE"))
+    env_file = args.env_file or os.getenv("CLICKUP_ENV_FILE")
+    _load_env_file(env_file)
     has_key = bool(os.getenv("CLICKUP_API_KEY"))
     has_workspace = bool(os.getenv("CLICKUP_WORKSPACE_ID"))
     has_webhook_secret = bool(os.getenv("CLICKUP_WEBHOOK_SECRET"))
@@ -34,6 +36,37 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     if not has_key:
         print("Create .env.local from .env.example, then set CLICKUP_API_KEY.")
         return 1
+    if args.live_auth:
+        return _run_live_auth_check(env_file)
+    return 0
+
+
+def _run_live_auth_check(env_file: str | None) -> int:
+    """Probe read-only ClickUp endpoints without printing secret values."""
+    try:
+        with ClickUpClient.from_environment(env_file) as client:
+            user_response = client.request("GET", "/v2/user")
+            teams_response = client.request("GET", "/v2/team")
+    except ClickUpApiError as exc:
+        print(f"ClickUp live auth: failed - {exc}")
+        return 2
+
+    user = user_response.get("user") if isinstance(user_response, dict) else None
+    teams = teams_response.get("teams") if isinstance(teams_response, dict) else None
+    team_list = teams if isinstance(teams, list) else []
+    workspace_id = os.getenv("CLICKUP_WORKSPACE_ID")
+    workspace_authorized = (
+        any(isinstance(team, dict) and str(team.get("id")) == workspace_id for team in team_list)
+        if workspace_id
+        else None
+    )
+
+    print(f"ClickUp /v2/user: {'authorized' if isinstance(user, dict) else 'unexpected response'}")
+    print(f"ClickUp /v2/team: authorized ({len(team_list)} team(s))")
+    if workspace_authorized is not None:
+        print(f"CLICKUP_WORKSPACE_ID authorization: {'authorized' if workspace_authorized else 'not found'}")
+        if not workspace_authorized:
+            return 2
     return 0
 
 
@@ -163,6 +196,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor = subcommands.add_parser("doctor", help="Check local ClickUp agent configuration.")
     doctor.add_argument("--env-file", help="Path to a local env file such as .env.local.")
+    doctor.add_argument(
+        "--live-auth",
+        action="store_true",
+        help="Call read-only ClickUp auth endpoints and report redacted authorization status.",
+    )
     doctor.set_defaults(func=_cmd_doctor)
 
     chat = subcommands.add_parser("chat", help="Start the future interactive ClickUp agent.")

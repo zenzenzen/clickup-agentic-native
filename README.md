@@ -128,6 +128,7 @@ Check your local setup:
 
 ```bash
 clickup-agent doctor --env-file .env.local
+clickup-agent doctor --env-file .env.local --live-auth
 ```
 
 ## Install Agent Skill
@@ -168,6 +169,8 @@ Development should move in small, easy-to-review steps.
 - ClickUp HTTP client with auth, redacted errors, and JSON response handling.
 - Registry-backed `tools list` and `hotkeys list` discovery.
 - `run` toolchains for search, create task, status update, assignment, due date, comment, tags, and timers.
+- `doctor --live-auth` for safe read-only token and workspace authorization checks.
+- Direct MCP wrappers for the first run toolchains, with write workflows defaulting to dry-run unless live execution is requested.
 - Dry-run output for every first-pass write workflow.
 
 ## Roadmap
