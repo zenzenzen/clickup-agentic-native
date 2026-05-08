@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Interactive local installer for clickup-agent.
 #
-# This script intentionally writes secrets only to a gitignored env file with
-# owner-only permissions. It does not send the token anywhere or commit it.
+# This script intentionally writes secrets only to a user config env file
+# outside any workspace, with owner-only permissions. It does not send the
+# token anywhere or commit it.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-DEFAULT_ENV_FILE="${REPO_ROOT}/.env.local"
+DEFAULT_ENV_FILE="${HOME}/.config/clickup-agent/.env"
 
 say() {
   printf '\n%s\n' "$*"
@@ -129,8 +130,7 @@ cursor_config_path() {
 }
 
 install_cursor_config() {
-  local env_file="$1"
-  local scope="$2"
+  local scope="$1"
   local config_file
   local command_path
 
@@ -145,14 +145,13 @@ install_cursor_config() {
     say "Existing Cursor MCP config backed up to ${backup}"
   fi
 
-  python3 - "${config_file}" "${command_path}" "${env_file}" <<'PY'
+  python3 - "${config_file}" "${command_path}" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 config_path = Path(sys.argv[1])
 command = sys.argv[2]
-env_file = sys.argv[3]
 
 if config_path.exists() and config_path.read_text(encoding="utf-8").strip():
     try:
@@ -166,9 +165,7 @@ servers = config.setdefault("mcpServers", {})
 servers["clickup-agent"] = {
     "command": command,
     "args": ["mcp"],
-    "env": {
-        "CLICKUP_ENV_FILE": env_file,
-    },
+    "env": {},
 }
 
 config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
@@ -178,8 +175,6 @@ PY
 }
 
 maybe_install_cursor_config() {
-  local env_file="$1"
-
   say "Install clickup-agent for Cursor MCP access?"
   printf '  1) project config at .cursor/mcp.json\n'
   printf '  2) global config at ~/.cursor/mcp.json\n'
@@ -191,10 +186,10 @@ maybe_install_cursor_config() {
 
   case "${choice}" in
     1)
-      install_cursor_config "${env_file}" "project"
+      install_cursor_config "project"
       ;;
     2)
-      install_cursor_config "${env_file}" "global"
+      install_cursor_config "global"
       ;;
     3)
       say "Skipping Cursor MCP config."
@@ -206,8 +201,6 @@ maybe_install_cursor_config() {
 }
 
 print_llm_client_snippet() {
-  local env_file="$1"
-
   say "LLM client MCP-style configuration"
   cat <<JSON
 {
@@ -215,9 +208,7 @@ print_llm_client_snippet() {
     "clickup-agent": {
       "command": "clickup-agent",
       "args": ["mcp"],
-      "env": {
-        "CLICKUP_ENV_FILE": "${env_file}"
-      }
+      "env": {}
     }
   }
 }
@@ -226,10 +217,10 @@ JSON
 
 main() {
   say "clickup-agent local installer"
-  printf 'This will create a gitignored env file for your ClickUp credentials.\n'
+  printf 'This will create the one native clickup-agent env file: %s\n' "${DEFAULT_ENV_FILE}"
 
   local env_file
-  env_file="$(prompt_visible "Env file path" "${DEFAULT_ENV_FILE}")"
+  env_file="${DEFAULT_ENV_FILE}"
 
   local api_key
   api_key="$(prompt_secret "Paste your ClickUp API token" "true")"
@@ -245,11 +236,11 @@ main() {
   say "Wrote ${env_file} with owner-only permissions."
 
   install_package
-  maybe_install_cursor_config "${env_file}"
-  print_llm_client_snippet "${env_file}"
+  maybe_install_cursor_config
+  print_llm_client_snippet
 
   say "Next check:"
-  printf 'clickup-agent doctor --env-file "%s"\n' "${env_file}"
+  printf 'clickup-agent doctor\n'
 }
 
 main "$@"

@@ -45,8 +45,8 @@ class ClickUpClient:
         )
 
     @classmethod
-    def from_environment(cls, env_file: str | None = None) -> ClickUpClient:
-        return cls(load_config(env_file))
+    def from_environment(cls) -> ClickUpClient:
+        return cls(load_config())
 
     def close(self) -> None:
         self._client.close()

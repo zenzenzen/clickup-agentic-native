@@ -39,11 +39,21 @@ The first practical run toolchains support dry-run previews and live execution w
 
 ```bash
 clickup-agent run search --dry-run --team-id 123 --query roadmap
+clickup-agent run list-hierarchy --dry-run --team-id 123
 clickup-agent run create-task --dry-run --list-id 456 --name "Write launch notes"
+clickup-agent run create-subtask --dry-run --list-id 456 --parent abc --name "Draft outline"
 clickup-agent run set-status --dry-run --task-id abc --status "in progress"
+clickup-agent run set-description --dry-run --task-id abc --markdown-content "## Updated brief"
+clickup-agent run update-task --dry-run --task-id abc --name "Rename task" --priority 2
 clickup-agent run assign --dry-run --task-id abc --assignee 182 --mode add
+clickup-agent run assign-me --dry-run --task-id abc
 clickup-agent run set-due-date --dry-run --task-id abc --due-date 2026-05-01
 clickup-agent run comment --dry-run --task-id abc --text "PR is ready"
+clickup-agent run edit-comment --dry-run --comment-id 123 --text "Updated" --assignee 182 --resolved
+clickup-agent run create-checklist --dry-run --task-id abc --name "Launch"
+clickup-agent run create-checklist-item --dry-run --checklist-id chk --name "Verify" --assignee 182
+clickup-agent run check-item --dry-run --checklist-id chk --item-id item --resolved
+clickup-agent run subtasks --dry-run --task-id abc
 clickup-agent run tags --dry-run --task-id abc --add review --remove stale
 clickup-agent run timer --dry-run --action start --team-id 123 --task-id abc
 ```
@@ -59,14 +69,15 @@ git clone https://github.com/zenzenzen/clickup-agentic-native.git
 cd clickup-agentic-native
 ```
 
-Create local secrets from the template:
+Create local secrets from the template in the default user config location:
 
 ```bash
-cp .env.example .env.local
-chmod 600 .env.local
+mkdir -p "$HOME/.config/clickup-agent"
+cp .env.example "$HOME/.config/clickup-agent/.env"
+chmod 600 "$HOME/.config/clickup-agent/.env"
 ```
 
-Then edit `.env.local`:
+Then edit `$HOME/.config/clickup-agent/.env`:
 
 ```bash
 CLICKUP_API_KEY=your_clickup_personal_token
@@ -110,9 +121,7 @@ Example LLM client server configuration:
     "clickup-agent": {
       "command": "clickup-agent",
       "args": ["mcp"],
-      "env": {
-        "CLICKUP_ENV_FILE": "/absolute/path/to/clickup-agentic-native/.env.local"
-      }
+      "env": {}
     }
   }
 }
@@ -122,13 +131,13 @@ For clients that do not support MCP yet, the fallback integration shape is to ca
 
 For Cursor, place the same server definition in `.cursor/mcp.json` for a project-specific install or `~/.cursor/mcp.json` for a global install. The installer can write this for you and preserves any existing MCP servers. A portable template lives at `.cursor/mcp.example.json`.
 
-This repo includes a project-local `.cursor/mcp.json` that points Cursor at the installed `clickup-agent` command and this repo's `.env.local` file.
+The native agent always reads `$HOME/.config/clickup-agent/.env`. Do not set `CLICKUP_ENV_FILE`; it is ignored by `clickup-agent`.
 
 Check your local setup:
 
 ```bash
-clickup-agent doctor --env-file .env.local
-clickup-agent doctor --env-file .env.local --live-auth
+clickup-agent doctor
+clickup-agent doctor --live-auth
 ```
 
 ## Install Agent Skill
@@ -168,7 +177,7 @@ Development should move in small, easy-to-review steps.
 - `scripts/generate_tool_catalog.py` for generating `src/clickup_agent/catalog/tool_catalog.json`.
 - ClickUp HTTP client with auth, redacted errors, and JSON response handling.
 - Registry-backed `tools list` and `hotkeys list` discovery.
-- `run` toolchains for search, create task, status update, assignment, due date, comment, tags, and timers.
+- `run` toolchains for search, hierarchy/list discovery, task creation/update, subtasks, checklists, comments, assignment, due dates, tags, and timers.
 - `doctor --live-auth` for safe read-only token and workspace authorization checks.
 - Direct MCP wrappers for the first run toolchains, with write workflows defaulting to dry-run unless live execution is requested.
 - Dry-run output for every first-pass write workflow.
@@ -184,7 +193,7 @@ Future implementation passes should expand:
 
 ## Secret Handling
 
-Copy `.env.example` to `.env.local` and fill in local values. Real credentials must stay in ignored env files.
+Copy `.env.example` to `$HOME/.config/clickup-agent/.env` and fill in local values. Real credentials must stay in that local env file outside tracked workspaces.
 
 ```bash
 CLICKUP_API_KEY=

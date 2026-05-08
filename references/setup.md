@@ -6,7 +6,7 @@ Use this when installing, repairing, or checking `clickup-agent`.
 
 - Python 3.12
 - `uv` preferred for isolated installation
-- A ClickUp personal token stored in a local env file
+- A ClickUp personal token stored in the default local env file
 
 ## Install Or Reinstall
 
@@ -27,11 +27,12 @@ python -m pip install -e .
 
 ## Env File
 
-Use `.env.local` for local secrets. It is gitignored and should have owner-only permissions:
+Use `$HOME/.config/clickup-agent/.env` for local secrets. It is the only native `clickup-agent` env file, stays outside any workspace, and should have owner-only permissions:
 
 ```bash
-cp .env.example .env.local
-chmod 600 .env.local
+mkdir -p "$HOME/.config/clickup-agent"
+cp .env.example "$HOME/.config/clickup-agent/.env"
+chmod 600 "$HOME/.config/clickup-agent/.env"
 ```
 
 Expected keys:
@@ -52,12 +53,13 @@ The local installer prompts for token, workspace ID, optional webhook secret, pa
 bash scripts/install.sh
 ```
 
-It backs up an existing env file, writes the new env file with `0600` permissions, and prints an MCP config snippet.
+It backs up an existing env file, writes `$HOME/.config/clickup-agent/.env` with `0600` permissions, and prints an MCP config snippet. `CLICKUP_ENV_FILE` and `--env-file` are not used by the native agent.
 
 ## Health Check
 
 ```bash
-clickup-agent doctor --env-file .env.local
+clickup-agent doctor
+clickup-agent doctor --live-auth
 ```
 
 The output should only say whether values are configured. It must not reveal token values.

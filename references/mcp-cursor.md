@@ -22,9 +22,7 @@ For one repo/workspace, use `.cursor/mcp.json`:
     "clickup-agent": {
       "command": "clickup-agent",
       "args": ["mcp"],
-      "env": {
-        "CLICKUP_ENV_FILE": "/absolute/path/to/clickup-agentic-native/.env.local"
-      }
+      "env": {}
     }
   }
 }
@@ -40,7 +38,7 @@ For all Cursor workspaces, use:
 ~/.cursor/mcp.json
 ```
 
-The same JSON shape applies. Prefer absolute paths for `CLICKUP_ENV_FILE`.
+The same JSON shape applies. `clickup-agent` always reads `$HOME/.config/clickup-agent/.env`; do not add `CLICKUP_ENV_FILE` to MCP config.
 
 ## Installer Path
 
@@ -56,9 +54,9 @@ Choose project config or global config when prompted. The installer preserves ex
 
 - Reload Cursor after editing MCP config.
 - Confirm `clickup-agent` resolves on PATH with `command -v clickup-agent`.
-- Confirm the env file path exists and does not expose token values in tracked files.
-- Run `clickup-agent doctor --env-file /absolute/path/to/.env.local`.
-- Run `clickup-agent doctor --env-file /absolute/path/to/.env.local --live-auth` to confirm token and workspace access with read-only ClickUp API calls.
+- Confirm the env file path exists outside tracked workspaces and does not expose token values in config files.
+- Run `clickup-agent doctor`.
+- Run `clickup-agent doctor --live-auth` to confirm token and workspace access with read-only ClickUp API calls.
 - The current MCP server exposes bootstrap/status tools and direct wrappers for the first curated run toolchains.
 - Write wrappers return dry-run previews by default; pass `live: true` only when the action should call ClickUp.
 - Broader ClickUp API coverage for docs, chat, attachments, admin workflows, and richer entity resolution is still planned.

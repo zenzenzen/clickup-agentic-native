@@ -8,43 +8,46 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 
 from . import __version__
 from .client import ClickUpApiError, ClickUpClient
-from .config import load_env_file
+from .config import ConfigError, default_env_file, load_config, load_env_file
 from .registry import ToolOperation, load_catalog
 from .toolchains import ToolchainError, run_toolchain
 
 
-def _load_env_file(path: str | None) -> None:
+def _load_env_file() -> None:
     """Load simple KEY=VALUE pairs without adding a runtime dependency yet."""
-    load_env_file(path)
+    load_env_file()
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
     """Check local configuration for the future agent runtime."""
-    env_file = args.env_file or os.getenv("CLICKUP_ENV_FILE")
-    _load_env_file(env_file)
-    has_key = bool(os.getenv("CLICKUP_API_KEY"))
-    has_workspace = bool(os.getenv("CLICKUP_WORKSPACE_ID"))
-    has_webhook_secret = bool(os.getenv("CLICKUP_WEBHOOK_SECRET"))
+    env_file = default_env_file()
+    _load_env_file()
+    try:
+        config = load_config()
+    except ConfigError:
+        config = None
+    has_key = bool(config and config.api_key)
+    has_workspace = bool(config and config.workspace_id)
+    has_webhook_secret = bool(config and config.webhook_secret)
     print(f"clickup-agent {__version__}")
     print(f"CLICKUP_API_KEY: {'configured' if has_key else 'missing'}")
     print(f"CLICKUP_WORKSPACE_ID: {'configured' if has_workspace else 'missing'}")
     print(f"CLICKUP_WEBHOOK_SECRET: {'configured' if has_webhook_secret else 'optional / missing'}")
     if not has_key:
-        print("Create .env.local from .env.example, then set CLICKUP_API_KEY.")
+        print(f"Create {env_file} from .env.example, then set CLICKUP_API_KEY.")
         return 1
     if args.live_auth:
-        return _run_live_auth_check(env_file)
+        return _run_live_auth_check()
     return 0
 
 
-def _run_live_auth_check(env_file: str | None) -> int:
+def _run_live_auth_check() -> int:
     """Probe read-only ClickUp endpoints without printing secret values."""
     try:
-        with ClickUpClient.from_environment(env_file) as client:
+        with ClickUpClient.from_environment() as client:
             user_response = client.request("GET", "/v2/user")
             teams_response = client.request("GET", "/v2/team")
     except ClickUpApiError as exc:
@@ -54,7 +57,7 @@ def _run_live_auth_check(env_file: str | None) -> int:
     user = user_response.get("user") if isinstance(user_response, dict) else None
     teams = teams_response.get("teams") if isinstance(teams_response, dict) else None
     team_list = teams if isinstance(teams, list) else []
-    workspace_id = os.getenv("CLICKUP_WORKSPACE_ID")
+    workspace_id = client.config.workspace_id
     workspace_authorized = (
         any(isinstance(team, dict) and str(team.get("id")) == workspace_id for team in team_list)
         if workspace_id
@@ -195,7 +198,6 @@ def build_parser() -> argparse.ArgumentParser:
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     doctor = subcommands.add_parser("doctor", help="Check local ClickUp agent configuration.")
-    doctor.add_argument("--env-file", help="Path to a local env file such as .env.local.")
     doctor.add_argument(
         "--live-auth",
         action="store_true",

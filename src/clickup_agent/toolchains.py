@@ -31,7 +31,6 @@ class RunOptions:
     json_payload: dict[str, Any]
     flag_payload: dict[str, Any]
     dry_run: bool
-    env_file: str | None
 
     @property
     def payload(self) -> dict[str, Any]:
@@ -57,7 +56,7 @@ class RunResult:
 
 
 ToolchainHandler = Callable[[RunOptions, ToolCatalog, ClickUpClient | None], RunResult]
-ClientFactory = Callable[[str | None], ClickUpClient]
+ClientFactory = Callable[[], ClickUpClient]
 
 
 class ToolchainRunner:
@@ -71,11 +70,21 @@ class ToolchainRunner:
         self.client_factory = client_factory or ClickUpClient.from_environment
         self.handlers: dict[str, ToolchainHandler] = {
             "search": _run_search,
+            "list-hierarchy": _run_list_hierarchy,
             "create-task": _run_create_task,
+            "create-subtask": _run_create_subtask,
             "set-status": _run_set_status,
+            "set-description": _run_set_description,
+            "update-task": _run_update_task,
             "assign": _run_assign,
+            "assign-me": _run_assign_me,
             "set-due-date": _run_set_due_date,
             "comment": _run_comment,
+            "edit-comment": _run_edit_comment,
+            "create-checklist": _run_create_checklist,
+            "create-checklist-item": _run_create_checklist_item,
+            "check-item": _run_check_item,
+            "subtasks": _run_subtasks,
             "tags": _run_tags,
             "timer": _run_timer,
         }
@@ -92,7 +101,7 @@ class ToolchainRunner:
         client: ClickUpClient | None = None
         if not options.dry_run:
             try:
-                client = self.client_factory(options.env_file)
+                client = self.client_factory()
             except ConfigError as exc:
                 raise ToolchainError(str(exc)) from exc
         try:
@@ -114,7 +123,6 @@ class ToolchainRunner:
             json_payload=json_payload,
             flag_payload={"_argv": remaining},
             dry_run=bool(known.dry_run),
-            env_file=known.env_file,
         )
 
 
@@ -136,7 +144,6 @@ def _add_common_run_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="Preview resolved operations without calling ClickUp.",
     )
-    parser.add_argument("--env-file", help="Path to a local env file such as .env.local.")
 
 
 def _parse_tool_args(name: str, argv: list[str], configure: Callable[[argparse.ArgumentParser], None]) -> dict[str, Any]:
@@ -206,6 +213,21 @@ def _bool(value: Any, *, field: str) -> bool:
         raise ToolchainError(str(exc)) from exc
 
 
+def _number(value: Any, *, field: str) -> int | float:
+    if isinstance(value, bool):
+        raise ToolchainError(f"{field} must be a number")
+    if isinstance(value, int | float):
+        return value
+    if isinstance(value, str):
+        try:
+            if "." in value:
+                return float(value)
+            return int(value)
+        except ValueError as exc:
+            raise ToolchainError(f"{field} must be a number") from exc
+    raise ToolchainError(f"{field} must be a number")
+
+
 def _require(payload: dict[str, Any], keys: list[str], *, context: str) -> None:
     try:
         require_keys(payload, keys, context=context)
@@ -236,7 +258,7 @@ def _run_search(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient
         elif client and client.config.workspace_id:
             payload["team_Id"] = client.config.workspace_id
         else:
-            workspace_id = load_workspace_id(options.env_file)
+            workspace_id = load_workspace_id()
             if workspace_id:
                 payload["team_Id"] = workspace_id
 
@@ -282,19 +304,191 @@ def _task_matches_query(task: Any, query: str) -> bool:
     return query in haystack
 
 
+def _run_list_hierarchy(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_list_hierarchy)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    archived = _bool(payload.pop("archived"), field="archived") if "archived" in payload else None
+    workspace_id = payload.pop("workspace_id", None) or payload.pop("team_id", None)
+    if not workspace_id and client and client.config.workspace_id:
+        workspace_id = client.config.workspace_id
+    if not workspace_id:
+        workspace_id = load_workspace_id()
+
+    operations: list[dict[str, Any]] = []
+    if "folder_id" in payload:
+        folder_operation, folder_response = _execute_operation(
+            catalog,
+            "GetLists",
+            _hierarchy_payload({"folder_id": payload.pop("folder_id")}, archived),
+            dry_run=options.dry_run,
+            client=client,
+        )
+        operations.append(folder_operation)
+        response = None if options.dry_run else {"lists": _compact_named_items(_items(folder_response, "lists"))}
+        return RunResult(options.name, options.dry_run, operations, response)
+
+    if "space_id" in payload:
+        space = _resolve_space_hierarchy(catalog, payload.pop("space_id"), archived, options.dry_run, client, operations)
+        return RunResult(options.name, options.dry_run, operations, None if options.dry_run else {"spaces": [space]})
+
+    if not workspace_id:
+        teams_operation, teams_response = _execute_operation(
+            catalog,
+            "GetAuthorizedTeams",
+            {},
+            dry_run=options.dry_run,
+            client=client,
+        )
+        operations.append(teams_operation)
+        if options.dry_run:
+            operations[0]["note"] = "Live run lists authorized workspaces when no workspace id is configured."
+            return RunResult(options.name, True, operations)
+        return RunResult(options.name, False, operations, {"workspaces": _compact_named_items(_items(teams_response, "teams"))})
+
+    workspace = _resolve_workspace_hierarchy(catalog, workspace_id, archived, options.dry_run, client, operations)
+    return RunResult(options.name, options.dry_run, operations, None if options.dry_run else {"workspaces": [workspace]})
+
+
+def _configure_list_hierarchy(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--team-id")
+    parser.add_argument("--workspace-id")
+    parser.add_argument("--space-id")
+    parser.add_argument("--folder-id")
+    parser.add_argument("--archived", action="store_true", default=None)
+
+
+def _hierarchy_payload(payload: dict[str, Any], archived: bool | None) -> dict[str, Any]:
+    if archived is not None:
+        payload["archived"] = archived
+    return payload
+
+
+def _resolve_workspace_hierarchy(
+    catalog: ToolCatalog,
+    workspace_id: Any,
+    archived: bool | None,
+    dry_run: bool,
+    client: ClickUpClient | None,
+    operations: list[dict[str, Any]],
+) -> dict[str, Any]:
+    spaces_operation, spaces_response = _execute_operation(
+        catalog,
+        "GetSpaces",
+        _hierarchy_payload({"team_id": workspace_id}, archived),
+        dry_run=dry_run,
+        client=client,
+    )
+    operations.append(spaces_operation)
+    workspace = {"id": str(workspace_id), "name": None, "spaces": []}
+    if dry_run:
+        spaces_operation["note"] = "Live run expands each returned space into folders and lists."
+        return workspace
+    workspace["spaces"] = [
+        _resolve_space_hierarchy(catalog, space.get("id"), archived, dry_run, client, operations, source=space)
+        for space in _items(spaces_response, "spaces")
+        if isinstance(space, dict) and space.get("id") is not None
+    ]
+    return workspace
+
+
+def _resolve_space_hierarchy(
+    catalog: ToolCatalog,
+    space_id: Any,
+    archived: bool | None,
+    dry_run: bool,
+    client: ClickUpClient | None,
+    operations: list[dict[str, Any]],
+    *,
+    source: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    folders_operation, folders_response = _execute_operation(
+        catalog,
+        "GetFolders",
+        _hierarchy_payload({"space_id": space_id}, archived),
+        dry_run=dry_run,
+        client=client,
+    )
+    operations.append(folders_operation)
+    folderless_operation, folderless_response = _execute_operation(
+        catalog,
+        "GetFolderlessLists",
+        _hierarchy_payload({"space_id": space_id}, archived),
+        dry_run=dry_run,
+        client=client,
+    )
+    operations.append(folderless_operation)
+    space = {
+        **_compact_named_item(source or {"id": space_id}),
+        "lists": [],
+        "folders": [],
+    }
+    if dry_run:
+        folders_operation["note"] = "Live run expands each returned folder into lists."
+        return space
+    space["lists"] = _compact_named_items(_items(folderless_response, "lists"))
+    space["folders"] = [
+        _resolve_folder_hierarchy(catalog, folder, archived, dry_run, client, operations)
+        for folder in _items(folders_response, "folders")
+        if isinstance(folder, dict) and folder.get("id") is not None
+    ]
+    return space
+
+
+def _resolve_folder_hierarchy(
+    catalog: ToolCatalog,
+    folder: dict[str, Any],
+    archived: bool | None,
+    dry_run: bool,
+    client: ClickUpClient | None,
+    operations: list[dict[str, Any]],
+) -> dict[str, Any]:
+    lists_operation, lists_response = _execute_operation(
+        catalog,
+        "GetLists",
+        _hierarchy_payload({"folder_id": folder.get("id")}, archived),
+        dry_run=dry_run,
+        client=client,
+    )
+    operations.append(lists_operation)
+    compact = _compact_named_item(folder)
+    compact["lists"] = [] if dry_run else _compact_named_items(_items(lists_response, "lists"))
+    return compact
+
+
+def _items(response: Any, key: str) -> list[Any]:
+    if isinstance(response, dict) and isinstance(response.get(key), list):
+        return response[key]
+    return []
+
+
+def _compact_named_items(items: list[Any]) -> list[dict[str, Any]]:
+    return [_compact_named_item(item) for item in items if isinstance(item, dict)]
+
+
+def _compact_named_item(item: dict[str, Any]) -> dict[str, Any]:
+    compact: dict[str, Any] = {"id": str(item.get("id")) if item.get("id") is not None else None}
+    if "name" in item:
+        compact["name"] = item.get("name")
+    return compact
+
+
 def _run_create_task(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
     flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_create_task)
     payload = merge_inputs(options.json_payload, flag_payload)
     _require(payload, ["list_id"], context="create-task")
+    _normalize_create_task_payload(payload)
+
+    operation, response = _execute_operation(catalog, "CreateTask", payload, dry_run=options.dry_run, client=client)
+    return RunResult(options.name, options.dry_run, [operation], response)
+
+
+def _normalize_create_task_payload(payload: dict[str, Any]) -> None:
     if "due_date_iso" in payload:
         payload["due_date"] = _date_to_epoch_millis(payload.pop("due_date_iso"), field="due_date")
     if "assignees" in payload:
         payload["assignees"] = [_int(item, field="assignees") for item in _csv_or_list(payload["assignees"])]
     if "tags" in payload:
         payload["tags"] = [str(item) for item in _csv_or_list(payload["tags"])]
-
-    operation, response = _execute_operation(catalog, "CreateTask", payload, dry_run=options.dry_run, client=client)
-    return RunResult(options.name, options.dry_run, [operation], response)
 
 
 def _configure_create_task(parser: argparse.ArgumentParser) -> None:
@@ -305,6 +499,21 @@ def _configure_create_task(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--assignee", dest="assignees", action="append")
     parser.add_argument("--tag", dest="tags", action="append")
     parser.add_argument("--due-date", dest="due_date_iso")
+
+
+def _run_create_subtask(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_create_subtask)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["list_id", "parent", "name"], context="create-subtask")
+    _normalize_create_task_payload(payload)
+
+    operation, response = _execute_operation(catalog, "CreateTask", payload, dry_run=options.dry_run, client=client)
+    return RunResult(options.name, options.dry_run, [operation], response)
+
+
+def _configure_create_subtask(parser: argparse.ArgumentParser) -> None:
+    _configure_create_task(parser)
+    parser.add_argument("--parent")
 
 
 def _run_set_status(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
@@ -319,6 +528,71 @@ def _run_set_status(options: RunOptions, catalog: ToolCatalog, client: ClickUpCl
 def _configure_set_status(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--task-id", required=False)
     parser.add_argument("--status")
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
+
+
+def _run_set_description(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_set_description)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["task_id"], context="set-description")
+    body = {key: payload.pop(key) for key in ("description", "markdown_content") if key in payload}
+    if not body:
+        raise ToolchainError("set-description requires --description or --markdown-content")
+    payload["body"] = body
+    operation, response = _execute_operation(catalog, "UpdateTask", payload, dry_run=options.dry_run, client=client)
+    return RunResult(options.name, options.dry_run, [operation], response)
+
+
+def _configure_set_description(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", required=False)
+    parser.add_argument("--description")
+    parser.add_argument("--markdown-content", dest="markdown_content")
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
+
+
+def _run_update_task(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_update_task)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["task_id"], context="update-task")
+    body: dict[str, Any] = {}
+    for key in ("name", "description", "markdown_content", "parent"):
+        if key in payload:
+            body[key] = payload.pop(key)
+    for key in ("priority", "time_estimate"):
+        if key in payload:
+            body[key] = _int(payload.pop(key), field=key)
+    if "points" in payload:
+        body["points"] = _number(payload.pop("points"), field="points")
+    for key in ("archived", "due_date_time", "start_date_time"):
+        if key in payload:
+            body[key] = _bool(payload.pop(key), field=key)
+    if "due_date_iso" in payload:
+        body["due_date"] = _date_to_epoch_millis(payload.pop("due_date_iso"), field="due_date")
+    if "start_date_iso" in payload:
+        body["start_date"] = _date_to_epoch_millis(payload.pop("start_date_iso"), field="start_date")
+    if not body:
+        raise ToolchainError("update-task requires at least one field to change")
+    payload["body"] = body
+    operation, response = _execute_operation(catalog, "UpdateTask", payload, dry_run=options.dry_run, client=client)
+    return RunResult(options.name, options.dry_run, [operation], response)
+
+
+def _configure_update_task(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", required=False)
+    parser.add_argument("--name")
+    parser.add_argument("--description")
+    parser.add_argument("--markdown-content", dest="markdown_content")
+    parser.add_argument("--priority")
+    parser.add_argument("--due-date", dest="due_date_iso")
+    parser.add_argument("--due-date-time", action="store_true", default=None)
+    parser.add_argument("--start-date", dest="start_date_iso")
+    parser.add_argument("--start-date-time", action="store_true", default=None)
+    parser.add_argument("--points")
+    parser.add_argument("--time-estimate")
+    parser.add_argument("--archived", action="store_true", default=None)
+    parser.add_argument("--parent")
     parser.add_argument("--custom-task-ids", action="store_true", default=None)
     parser.add_argument("--team-id")
 
@@ -389,12 +663,114 @@ def _run_assign(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient
     return RunResult(options.name, options.dry_run, operations, response)
 
 
+def _run_assign_me(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_assign_me)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["task_id"], context="assign-me")
+    mode = str(payload.pop("mode", "add"))
+    if mode not in {"add", "remove", "replace"}:
+        raise ToolchainError("assign-me --mode must be add, remove, or replace")
+
+    workspace_id = payload.get("team_id")
+    if not workspace_id and client and client.config.workspace_id:
+        workspace_id = client.config.workspace_id
+    if not workspace_id:
+        workspace_id = load_workspace_id()
+    if workspace_id and payload.get("custom_task_ids") and "team_id" not in payload:
+        payload["team_id"] = workspace_id
+
+    user_operation, user_response = _execute_operation(
+        catalog,
+        "GetAuthorizedUser",
+        {},
+        dry_run=options.dry_run,
+        client=client,
+    )
+    assignee_id: Any = 0
+    if not options.dry_run:
+        assignee_id = _authorized_user_id(user_response)
+
+    body, extra_operations = _assignment_body(mode, [assignee_id], payload, catalog, options.dry_run, client)
+    payload["body"] = body
+    update_operation, response = _execute_operation(catalog, "UpdateTask", payload, dry_run=options.dry_run, client=client)
+    if options.dry_run:
+        _replace_self_placeholder(update_operation)
+        update_operation["note"] = "Live run resolves the authorized user id and substitutes it in assignees.add."
+    return RunResult(options.name, options.dry_run, [user_operation, *extra_operations, update_operation], response)
+
+
 def _configure_assign(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--task-id", required=False)
     parser.add_argument("--assignee", dest="assignees", action="append")
-    parser.add_argument("--mode", choices=["add", "remove", "replace"], default="add")
+    parser.add_argument("--mode", choices=["add", "remove", "replace"], default=None)
     parser.add_argument("--custom-task-ids", action="store_true", default=None)
     parser.add_argument("--team-id")
+
+
+def _configure_assign_me(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", required=False)
+    parser.add_argument("--mode", choices=["add", "remove", "replace"], default=None)
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
+
+
+def _authorized_user_id(response: Any) -> int:
+    if not isinstance(response, dict) or not isinstance(response.get("user"), dict):
+        raise ToolchainError("GetAuthorizedUser returned an unexpected response")
+    if "id" not in response["user"]:
+        raise ToolchainError("GetAuthorizedUser response did not include user.id")
+    return _int(response["user"]["id"], field="authorized user id")
+
+
+def _replace_self_placeholder(operation: dict[str, Any]) -> None:
+    body = operation.get("json")
+    if not isinstance(body, dict):
+        return
+    assignees = body.get("assignees")
+    if not isinstance(assignees, dict):
+        return
+    for key in ("add", "rem"):
+        values = assignees.get(key)
+        if isinstance(values, list):
+            assignees[key] = ["<self>" if item == 0 else item for item in values]
+
+
+def _assignment_body(
+    mode: str,
+    assignee_ids: list[Any],
+    payload: dict[str, Any],
+    catalog: ToolCatalog,
+    dry_run: bool,
+    client: ClickUpClient | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    if mode == "replace":
+        get_payload = {
+            key: value
+            for key, value in payload.items()
+            if key in {"task_id", "custom_task_ids", "team_id"}
+        }
+        get_operation, get_response = _execute_operation(
+            catalog,
+            "GetTask",
+            get_payload,
+            dry_run=dry_run,
+            client=client,
+        )
+        remove_ids = _current_assignee_ids(get_response) if not dry_run else []
+        return (
+            {
+                "assignees": {
+                    "add": assignee_ids,
+                    "rem": [item for item in remove_ids if item not in assignee_ids],
+                }
+            },
+            [get_operation],
+        )
+    if mode == "remove":
+        return {"assignees": {"add": [], "rem": assignee_ids}}, []
+    if mode == "add":
+        return {"assignees": {"add": assignee_ids, "rem": []}}, []
+    raise ToolchainError("assign --mode must be add, remove, or replace")
 
 
 def _current_assignee_ids(response: Any) -> list[int]:
@@ -437,6 +813,128 @@ def _configure_comment(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--group-assignee")
     parser.add_argument("--custom-task-ids", action="store_true", default=None)
     parser.add_argument("--team-id")
+
+
+def _run_edit_comment(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_edit_comment)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["comment_id", "text", "assignee"], context="edit-comment")
+    if "resolved" not in payload:
+        raise ToolchainError("edit-comment requires --resolved or --unresolved")
+    body = {
+        "comment_text": payload.pop("text"),
+        "assignee": _int(payload.pop("assignee"), field="assignee"),
+        "resolved": _bool(payload.pop("resolved"), field="resolved"),
+    }
+    payload["body"] = body
+    operation, response = _execute_operation(catalog, "UpdateComment", payload, dry_run=options.dry_run, client=client)
+    return RunResult(options.name, options.dry_run, [operation], response)
+
+
+def _configure_edit_comment(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--comment-id", required=False)
+    parser.add_argument("--text")
+    parser.add_argument("--assignee")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--resolved", dest="resolved", action="store_true", default=None)
+    group.add_argument("--unresolved", dest="resolved", action="store_false", default=None)
+
+
+def _run_create_checklist(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_create_checklist)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["task_id", "name"], context="create-checklist")
+    payload["body"] = {"name": payload.pop("name")}
+    operation, response = _execute_operation(catalog, "CreateChecklist", payload, dry_run=options.dry_run, client=client)
+    return RunResult(options.name, options.dry_run, [operation], response)
+
+
+def _configure_create_checklist(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", required=False)
+    parser.add_argument("--name")
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
+
+
+def _run_create_checklist_item(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_create_checklist_item)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["checklist_id", "name"], context="create-checklist-item")
+    body: dict[str, Any] = {"name": payload.pop("name")}
+    if "assignee" in payload:
+        body["assignee"] = _int(payload.pop("assignee"), field="assignee")
+    payload["body"] = body
+    operation, response = _execute_operation(
+        catalog,
+        "CreateChecklistItem",
+        payload,
+        dry_run=options.dry_run,
+        client=client,
+    )
+    return RunResult(options.name, options.dry_run, [operation], response)
+
+
+def _configure_create_checklist_item(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--checklist-id", required=False)
+    parser.add_argument("--name")
+    parser.add_argument("--assignee")
+
+
+def _run_check_item(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_check_item)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["checklist_id", "item_id"], context="check-item")
+    payload["checklist_item_id"] = payload.pop("item_id")
+    body: dict[str, Any] = {}
+    if "resolved" in payload:
+        body["resolved"] = _bool(payload.pop("resolved"), field="resolved")
+    if "name" in payload:
+        body["name"] = payload.pop("name")
+    if "assignee" in payload:
+        body["assignee"] = _int(payload.pop("assignee"), field="assignee")
+    if "parent" in payload:
+        body["parent"] = payload.pop("parent")
+    if not body:
+        raise ToolchainError("check-item requires at least one field to change")
+    payload["body"] = body
+    operation, response = _execute_operation(catalog, "EditChecklistItem", payload, dry_run=options.dry_run, client=client)
+    return RunResult(options.name, options.dry_run, [operation], response)
+
+
+def _configure_check_item(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--checklist-id", required=False)
+    parser.add_argument("--item-id")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--resolved", dest="resolved", action="store_true", default=None)
+    group.add_argument("--unresolved", dest="resolved", action="store_false", default=None)
+    parser.add_argument("--name")
+    parser.add_argument("--assignee")
+    parser.add_argument("--parent")
+
+
+def _run_subtasks(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_subtasks)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["task_id"], context="subtasks")
+    payload["include_subtasks"] = True
+    operation, response = _execute_operation(catalog, "GetTask", payload, dry_run=options.dry_run, client=client)
+    if options.dry_run:
+        return RunResult(options.name, True, [operation])
+    if isinstance(response, dict):
+        return RunResult(
+            options.name,
+            False,
+            [operation],
+            {"task_id": response.get("id"), "subtasks": response.get("subtasks", [])},
+        )
+    return RunResult(options.name, False, [operation], response)
+
+
+def _configure_subtasks(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", required=False)
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
+    parser.add_argument("--include-markdown-description", dest="include_markdown_description", action="store_true", default=None)
 
 
 def _run_tags(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
@@ -494,7 +992,7 @@ def _run_timer(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient 
     if not workspace_id and client and client.config.workspace_id:
         workspace_id = client.config.workspace_id
     if not workspace_id:
-        workspace_id = load_workspace_id(options.env_file)
+        workspace_id = load_workspace_id()
     if not workspace_id:
         raise ToolchainError("timer requires --team-id, --workspace-id, or CLICKUP_WORKSPACE_ID")
 
@@ -551,7 +1049,7 @@ def _run_timer(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient 
 
 
 def _configure_timer(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--action", choices=["current", "start", "stop"], default="current")
+    parser.add_argument("--action", choices=["current", "start", "stop"], default=None)
     parser.add_argument("--team-id")
     parser.add_argument("--workspace-id")
     parser.add_argument("--task-id")

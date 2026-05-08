@@ -3,9 +3,7 @@
     "clickup-agent": {
       "command": "clickup-agent",
       "args": ["mcp"],
-      "env": {
-        "CLICKUP_ENV_FILE": "/absolute/path/to/clickup-agentic-native/.env.local"
-      }
+      "env": {}
     }
   }
 }

@@ -34,7 +34,7 @@ uv run pytest
 bash -n scripts/install.sh
 bash -n scripts/install-skill.sh
 clickup-agent --version
-clickup-agent doctor --env-file .env.example || true
+clickup-agent doctor || true
 gh repo view --json nameWithOwner,visibility,url
 ```
 
