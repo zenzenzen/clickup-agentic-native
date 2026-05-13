@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import os
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,7 +14,6 @@ CLICKUP_ENV_KEYS = {
     "CLICKUP_API_KEY",
     "CLICKUP_WORKSPACE_ID",
     "CLICKUP_WEBHOOK_SECRET",
-    "CLICKUP_BASE_URL",
 }
 
 
@@ -52,10 +51,18 @@ def read_env_file() -> dict[str, str]:
     return values
 
 
-def load_env_file() -> None:
-    """Load ClickUp values from the canonical env file into this process."""
-    for key, value in read_env_file().items():
-        os.environ[key] = value
+def env_file_warnings() -> list[str]:
+    """Return redacted local config hygiene warnings."""
+    env_path = default_env_file()
+    if not env_path.exists():
+        return []
+    try:
+        mode = stat.S_IMODE(env_path.stat().st_mode)
+    except OSError as exc:
+        return [f"Could not inspect env file permissions: {exc.strerror or exc.__class__.__name__}"]
+    if mode & 0o077:
+        return ["Env file is readable by group or other users; run chmod 600 on it."]
+    return []
 
 
 def config_status() -> dict[str, object]:
@@ -66,6 +73,7 @@ def config_status() -> dict[str, object]:
         "clickup_api_key_configured": bool(values.get("CLICKUP_API_KEY")),
         "clickup_workspace_id_configured": bool(values.get("CLICKUP_WORKSPACE_ID")),
         "clickup_webhook_secret_configured": bool(values.get("CLICKUP_WEBHOOK_SECRET")),
+        "warnings": env_file_warnings(),
     }
 
 
@@ -75,12 +83,10 @@ def load_config() -> ClickUpConfig:
     api_key = values.get("CLICKUP_API_KEY")
     if not api_key:
         raise ConfigError(f"CLICKUP_API_KEY is missing. Set it in {selected_env_file}.")
-    load_env_file()
     return ClickUpConfig(
         api_key=api_key,
         workspace_id=values.get("CLICKUP_WORKSPACE_ID") or None,
         webhook_secret=values.get("CLICKUP_WEBHOOK_SECRET") or None,
-        base_url=values.get("CLICKUP_BASE_URL") or DEFAULT_BASE_URL,
     )
 
 

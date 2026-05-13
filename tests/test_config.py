@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from clickup_agent.cli import main
 from clickup_agent.config import config_status, default_env_file, load_config
 
@@ -22,6 +24,7 @@ def test_default_env_file_uses_home_config_path(tmp_path, monkeypatch) -> None:
     env_file = tmp_path / ".config" / "clickup-agent" / ".env"
     env_file.parent.mkdir(parents=True)
     env_file.write_text("CLICKUP_API_KEY=pk_test\nCLICKUP_WORKSPACE_ID=123\n", encoding="utf-8")
+    env_file.chmod(0o600)
 
     assert default_env_file() == env_file
 
@@ -30,6 +33,7 @@ def test_default_env_file_uses_home_config_path(tmp_path, monkeypatch) -> None:
 
     assert status["env_file"] == str(env_file)
     assert status["clickup_api_key_configured"] is True
+    assert status["warnings"] == []
     assert config.api_key == "pk_test"
     assert config.workspace_id == "123"
 
@@ -47,6 +51,45 @@ def test_clickup_env_file_is_ignored_for_native_agent(tmp_path, monkeypatch) -> 
     config = load_config()
 
     assert config.api_key == "pk_canonical"
+
+
+def test_load_config_does_not_export_secrets_to_process_env(tmp_path, monkeypatch) -> None:
+    _clear_clickup_env(monkeypatch)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    env_file = tmp_path / ".config" / "clickup-agent" / ".env"
+    env_file.parent.mkdir(parents=True)
+    env_file.write_text("CLICKUP_API_KEY=pk_canonical\nCLICKUP_WORKSPACE_ID=123\n", encoding="utf-8")
+
+    config = load_config()
+
+    assert config.api_key == "pk_canonical"
+    assert os.environ.get("CLICKUP_API_KEY") is None
+    assert os.environ.get("CLICKUP_WORKSPACE_ID") is None
+
+
+def test_clickup_base_url_in_env_file_is_ignored(tmp_path, monkeypatch) -> None:
+    _clear_clickup_env(monkeypatch)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    env_file = tmp_path / ".config" / "clickup-agent" / ".env"
+    env_file.parent.mkdir(parents=True)
+    env_file.write_text("CLICKUP_API_KEY=pk_canonical\nCLICKUP_BASE_URL=https://example.invalid\n", encoding="utf-8")
+
+    config = load_config()
+
+    assert config.base_url == "https://api.clickup.com/api"
+
+
+def test_config_status_warns_about_broad_env_file_permissions(tmp_path, monkeypatch) -> None:
+    _clear_clickup_env(monkeypatch)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    env_file = tmp_path / ".config" / "clickup-agent" / ".env"
+    env_file.parent.mkdir(parents=True)
+    env_file.write_text("CLICKUP_API_KEY=pk_test\n", encoding="utf-8")
+    env_file.chmod(0o644)
+
+    status = config_status()
+
+    assert status["warnings"] == ["Env file is readable by group or other users; run chmod 600 on it."]
 
 
 def test_doctor_loads_default_env_file(tmp_path, monkeypatch, capsys) -> None:

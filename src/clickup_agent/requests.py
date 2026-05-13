@@ -33,6 +33,14 @@ class OperationRequest:
             "json": self.json_body,
         }
 
+    def to_live_summary(self) -> dict[str, Any]:
+        return {
+            "operation_id": self.operation_id,
+            "method": self.method,
+            "path": self.path,
+            "params": self.params,
+        }
+
 
 def _aliases(name: str) -> tuple[str, ...]:
     normalized = re.sub(r"[^a-zA-Z0-9]+", "_", name).strip("_").lower()

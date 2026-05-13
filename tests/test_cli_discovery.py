@@ -41,3 +41,4 @@ def test_run_tool_specific_help_shows_selected_flags(capsys) -> None:
     assert "--list-id" in output
     assert "--name" in output
     assert "--dry-run" in output
+    assert "--live" in output

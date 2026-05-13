@@ -28,6 +28,25 @@ def test_create_task_dry_run_from_cli(capsys) -> None:
     assert payload["operations"][0]["json"]["name"] == "Ship it"
 
 
+def test_write_toolchains_default_to_dry_run_from_cli(capsys) -> None:
+    assert main(["run", "create-task", "--list-id", "123", "--name", "Ship it"]) == 0
+
+    payload = _json_output(capsys)
+
+    assert payload["dry_run"] is True
+    assert payload["operations"][0]["operation_id"] == "CreateTask"
+    assert payload["operations"][0]["json"] == {"name": "Ship it"}
+
+
+def test_run_rejects_conflicting_live_and_dry_run_flags(capsys) -> None:
+    assert main(["run", "create-task", "--dry-run", "--live", "--list-id", "123", "--name", "Ship it"]) == 2
+
+    captured = capsys.readouterr()
+
+    assert "Use either --dry-run or --live" in captured.out
+    assert "Traceback" not in captured.out
+
+
 def test_update_comment_tag_and_timer_dry_runs(capsys) -> None:
     commands = [
         ["run", "set-status", "--dry-run", "--task-id", "abc", "--status", "in progress"],
@@ -260,11 +279,13 @@ def test_create_task_live_execution_uses_mocked_http() -> None:
         )
     )
 
-    result = runner.run("create-task", ["--list-id", "123", "--name", "Ship it"])
+    result = runner.run("create-task", ["--live", "--list-id", "123", "--name", "Ship it"])
 
     assert len(requests) == 1
     assert result.response == {"id": "task-1"}
     assert result.operations[0]["operation_id"] == "CreateTask"
+    assert "json" not in result.operations[0]
+    assert "headers" not in result.operations[0]
 
 
 def test_list_hierarchy_live_execution_returns_only_names_and_ids() -> None:
@@ -381,7 +402,7 @@ def test_new_hotkeys_live_execution_uses_mocked_http() -> None:
             )
         )
 
-        result = runner.run(name, argv)
+        result = runner.run(name, ["--live", *argv])
 
         assert result.dry_run is False
         assert len(requests) == 1
@@ -406,7 +427,7 @@ def test_assign_me_live_execution_resolves_authorized_user() -> None:
         )
     )
 
-    result = runner.run("assign-me", ["--task-id", "abc"])
+    result = runner.run("assign-me", ["--live", "--task-id", "abc"])
 
     assert result.response == {"id": "abc"}
     assert [request.method for request in requests] == ["GET", "PUT"]
@@ -602,7 +623,7 @@ def test_live_api_errors_return_cli_error_without_traceback(monkeypatch, capsys)
 
     monkeypatch.setattr("clickup_agent.toolchains.ClickUpClient.from_environment", failing_client)
 
-    assert main(["run", "create-task", "--list-id", "123", "--name", "Ship it"]) == 2
+    assert main(["run", "create-task", "--live", "--list-id", "123", "--name", "Ship it"]) == 2
     captured = capsys.readouterr()
 
     assert "ClickUp API error (400)" in captured.out
@@ -610,3 +631,26 @@ def test_live_api_errors_return_cli_error_without_traceback(monkeypatch, capsys)
     assert "pk_test" not in captured.out
     assert "Traceback" not in captured.out
     assert "Traceback" not in captured.err
+
+
+def test_live_api_error_details_are_truncated(monkeypatch, capsys) -> None:
+    monkeypatch.setenv("CLICKUP_API_KEY", "pk_test")
+
+    def failing_client() -> ClickUpClient:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(400, text="bad pk_test token " + ("x" * 3000), request=request)
+
+        return ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+
+    monkeypatch.setattr("clickup_agent.toolchains.ClickUpClient.from_environment", failing_client)
+
+    assert main(["run", "create-task", "--live", "--list-id", "123", "--name", "Ship it"]) == 2
+    captured = capsys.readouterr()
+
+    assert "<redacted>" in captured.out
+    assert "<truncated " in captured.out
+    assert "pk_test" not in captured.out
+    assert len(captured.out) < 2300

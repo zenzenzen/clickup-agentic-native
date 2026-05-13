@@ -11,20 +11,15 @@ import json
 
 from . import __version__
 from .client import ClickUpApiError, ClickUpClient
-from .config import ConfigError, default_env_file, load_config, load_env_file
+from .config import ConfigError, config_status, default_env_file, load_config
 from .registry import ToolOperation, load_catalog
 from .toolchains import ToolchainError, run_toolchain
-
-
-def _load_env_file() -> None:
-    """Load simple KEY=VALUE pairs without adding a runtime dependency yet."""
-    load_env_file()
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
     """Check local configuration for the future agent runtime."""
     env_file = default_env_file()
-    _load_env_file()
+    status = config_status()
     try:
         config = load_config()
     except ConfigError:
@@ -36,6 +31,8 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     print(f"CLICKUP_API_KEY: {'configured' if has_key else 'missing'}")
     print(f"CLICKUP_WORKSPACE_ID: {'configured' if has_workspace else 'missing'}")
     print(f"CLICKUP_WEBHOOK_SECRET: {'configured' if has_webhook_secret else 'optional / missing'}")
+    for warning in status.get("warnings", []):
+        print(f"CONFIG WARNING: {warning}")
     if not has_key:
         print(f"Create {env_file} from .env.example, then set CLICKUP_API_KEY.")
         return 1

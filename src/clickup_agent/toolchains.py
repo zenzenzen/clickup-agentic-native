@@ -31,6 +31,7 @@ class RunOptions:
     json_payload: dict[str, Any]
     flag_payload: dict[str, Any]
     dry_run: bool
+    live: bool
 
     @property
     def payload(self) -> dict[str, Any]:
@@ -114,16 +115,28 @@ class ToolchainRunner:
         parser = argparse.ArgumentParser(prog=f"clickup-agent run {name}", add_help=False)
         _add_common_run_arguments(parser)
         known, remaining = parser.parse_known_args(argv)
+        if known.dry_run and known.live:
+            raise ToolchainError("Use either --dry-run or --live, not both")
         try:
             json_payload = parse_json_object(known.json_payload)
         except InputValidationError as exc:
             raise ToolchainError(str(exc)) from exc
+        dry_run = bool(known.dry_run)
+        if not known.live and not dry_run:
+            dry_run = self._defaults_to_dry_run(name)
         return RunOptions(
             name=name,
             json_payload=json_payload,
             flag_payload={"_argv": remaining},
-            dry_run=bool(known.dry_run),
+            dry_run=dry_run,
+            live=bool(known.live),
         )
+
+    def _defaults_to_dry_run(self, name: str) -> bool:
+        try:
+            return self.catalog.get_toolchain(name).is_write
+        except KeyError:
+            return False
 
 
 def run_toolchain(name: str, argv: list[str]) -> RunResult:
@@ -143,6 +156,12 @@ def _add_common_run_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         default=None,
         help="Preview resolved operations without calling ClickUp.",
+    )
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        default=None,
+        help="Execute the toolchain against ClickUp.",
     )
 
 
@@ -174,9 +193,8 @@ def _execute_operation(
         except InputValidationError as exc:
             raise ToolchainError(str(exc)) from exc
 
-    dry_run_payload = request.to_dry_run()
     if dry_run:
-        return dry_run_payload, None
+        return request.to_dry_run(), None
     if client is None:
         raise ToolchainError("Live execution requires a ClickUp client")
     try:
@@ -189,7 +207,7 @@ def _execute_operation(
         )
     except ClickUpApiError as exc:
         raise ToolchainError(str(exc)) from exc
-    return dry_run_payload, response
+    return request.to_live_summary(), response
 
 
 def _date_to_epoch_millis(value: Any, *, field: str) -> int:

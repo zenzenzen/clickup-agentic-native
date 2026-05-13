@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
@@ -23,6 +24,11 @@ SERVER_NAME = "clickup-agent"
 def _configure_environment() -> dict[str, Any]:
     """Load the canonical env file and return redacted configuration status."""
     status = config_status()
+    env_file = status.get("env_file")
+    if isinstance(env_file, str):
+        home = str(Path.home())
+        if env_file == home or env_file.startswith(f"{home}/"):
+            status["env_file"] = f"~{env_file[len(home):]}"
     return {
         "version": __version__,
         **status,
@@ -31,6 +37,17 @@ def _configure_environment() -> dict[str, Any]:
 
 def _payload_without_none(**items: Any) -> dict[str, Any]:
     return {key: value for key, value in items.items() if value is not None}
+
+
+def _compact_operation(operation: Any) -> dict[str, Any]:
+    return {
+        "name": operation.name,
+        "method": operation.method,
+        "path": operation.path,
+        "tags": list(operation.tags),
+        "write": operation.is_write,
+        "summary": operation.summary,
+    }
 
 
 def _run_mcp_toolchain(
@@ -42,6 +59,8 @@ def _run_mcp_toolchain(
     argv: list[str] = []
     if not live:
         argv.append("--dry-run")
+    else:
+        argv.append("--live")
     if payload:
         argv.extend(["--json", json.dumps(payload)])
 
@@ -62,10 +81,10 @@ def create_server() -> FastMCP:
         return _configure_environment()
 
     @server.tool()
-    def clickup_agent_tooling_plan() -> dict[str, Any]:
+    def clickup_agent_tooling_plan(include_samples: bool = False) -> dict[str, Any]:
         """Return the generated and curated native ClickUp tool surface."""
         catalog = load_catalog()
-        return {
+        plan: dict[str, Any] = {
             "command": "clickup-agent",
             "catalog": {
                 "source": catalog.source,
@@ -99,8 +118,10 @@ def create_server() -> FastMCP:
                 toolchain.to_dict()
                 for toolchain in catalog.toolchains
             ],
-            "sample_operations": [operation.to_dict() for operation in catalog.operations[:10]],
         }
+        if include_samples:
+            plan["sample_operations"] = [_compact_operation(operation) for operation in catalog.operations[:10]]
+        return plan
 
     @server.tool()
     def clickup_agent_search(

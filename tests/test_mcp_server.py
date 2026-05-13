@@ -1,12 +1,26 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import httpx
 
 from clickup_agent.client import ClickUpClient
 from clickup_agent.config import ClickUpConfig
 from clickup_agent.mcp_server import _run_mcp_toolchain, create_server
+
+
+def test_mcp_status_redacts_home_path(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    env_file = tmp_path / ".config" / "clickup-agent" / ".env"
+    env_file.parent.mkdir(parents=True)
+    env_file.write_text("CLICKUP_API_KEY=pk_test\n", encoding="utf-8")
+
+    server = create_server()
+    status = server._tool_manager._tools["clickup_agent_status"].fn()
+
+    assert status["env_file"] == "~/.config/clickup-agent/.env"
+    assert str(tmp_path) not in json.dumps(status)
 
 
 def test_mcp_registers_direct_clickup_tools() -> None:
@@ -38,6 +52,25 @@ def test_mcp_registers_direct_clickup_tools() -> None:
         "clickup_agent_tags",
         "clickup_agent_timer",
     } <= names
+
+
+def test_mcp_tooling_plan_omits_operation_samples_by_default() -> None:
+    server = create_server()
+    plan = server._tool_manager._tools["clickup_agent_tooling_plan"].fn()
+
+    assert "sample_operations" not in plan
+    assert len(json.dumps(plan)) < 5000
+
+
+def test_mcp_tooling_plan_uses_compact_operation_samples_when_requested() -> None:
+    server = create_server()
+    plan = server._tool_manager._tools["clickup_agent_tooling_plan"].fn(include_samples=True)
+
+    sample = plan["sample_operations"][0]
+
+    assert "request_schema" not in sample
+    assert "response_schema" not in sample
+    assert {"name", "method", "path", "tags", "write", "summary"} <= set(sample)
 
 
 def test_mcp_write_toolchains_default_to_dry_run() -> None:
