@@ -142,3 +142,12 @@ def test_committed_catalog_loads_required_toolchains() -> None:
     assert catalog.get_operation("UpdateTask").request_schema is not None
     assert catalog.get_toolchain("create task").name == "create-task"
     assert "$ref" not in (ROOT / "src/clickup_agent/catalog/tool_catalog.json").read_text(encoding="utf-8")
+
+
+def test_catalog_load_is_cached() -> None:
+    load_catalog.cache_clear()
+
+    first = load_catalog()
+    second = load_catalog()
+
+    assert first is second

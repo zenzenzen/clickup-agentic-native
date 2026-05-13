@@ -9,6 +9,8 @@ import httpx
 
 from .config import ClickUpConfig, load_config, redact_secret
 
+MAX_ERROR_DETAIL_CHARS = 2000
+
 
 @dataclass(frozen=True)
 class ClickUpApiError(RuntimeError):
@@ -45,8 +47,8 @@ class ClickUpClient:
         )
 
     @classmethod
-    def from_environment(cls, env_file: str | None = None) -> ClickUpClient:
-        return cls(load_config(env_file))
+    def from_environment(cls) -> ClickUpClient:
+        return cls(load_config())
 
     def close(self) -> None:
         self._client.close()
@@ -76,10 +78,10 @@ class ClickUpClient:
             )
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            body = redact_secret(exc.response.text, self.config.api_key)
+            body = _compact_error_detail(redact_secret(exc.response.text, self.config.api_key))
             raise ClickUpApiError(exc.response.status_code, exc.response.reason_phrase, body) from exc
         except httpx.HTTPError as exc:
-            message = redact_secret(str(exc), self.config.api_key)
+            message = _compact_error_detail(redact_secret(str(exc), self.config.api_key))
             raise ClickUpApiError(None, message) from exc
 
         if not response.content:
@@ -88,3 +90,10 @@ class ClickUpClient:
         if "application/json" in content_type:
             return response.json()
         return response.text
+
+
+def _compact_error_detail(value: str) -> str:
+    if len(value) <= MAX_ERROR_DETAIL_CHARS:
+        return value
+    omitted = len(value) - MAX_ERROR_DETAIL_CHARS
+    return f"{value[:MAX_ERROR_DETAIL_CHARS]}... <truncated {omitted} chars>"

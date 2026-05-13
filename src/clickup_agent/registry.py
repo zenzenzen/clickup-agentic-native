@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from functools import lru_cache
 from importlib import resources
 from typing import Any, Iterable, Literal
 
@@ -125,6 +126,12 @@ class ToolCatalog:
     source_version: str
     operations: tuple[ToolOperation, ...]
     toolchains: tuple[Toolchain, ...]
+    _operations_by_id: dict[str, ToolOperation] = field(init=False, repr=False, compare=False)
+    _toolchains_by_name: dict[str, Toolchain] = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_operations_by_id", {operation.operation_id: operation for operation in self.operations})
+        object.__setattr__(self, "_toolchains_by_name", {toolchain.name: toolchain for toolchain in self.toolchains})
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ToolCatalog:
@@ -144,17 +151,17 @@ class ToolCatalog:
         }
 
     def get_operation(self, operation_id: str) -> ToolOperation:
-        for operation in self.operations:
-            if operation.operation_id == operation_id:
-                return operation
-        raise KeyError(f"Unknown ClickUp operation: {operation_id}")
+        try:
+            return self._operations_by_id[operation_id]
+        except KeyError as exc:
+            raise KeyError(f"Unknown ClickUp operation: {operation_id}") from exc
 
     def get_toolchain(self, name: str) -> Toolchain:
         normalized = normalize_tool_name(name)
-        for toolchain in self.toolchains:
-            if toolchain.name == normalized:
-                return toolchain
-        raise KeyError(f"Unknown ClickUp toolchain: {name}")
+        try:
+            return self._toolchains_by_name[normalized]
+        except KeyError as exc:
+            raise KeyError(f"Unknown ClickUp toolchain: {name}") from exc
 
     def list_operations(
         self,
@@ -177,6 +184,7 @@ def normalize_tool_name(value: str) -> str:
     return "-".join(part for part in cleaned.split("-") if part)
 
 
+@lru_cache(maxsize=1)
 def load_catalog() -> ToolCatalog:
     """Load the committed generated catalog bundled with the package."""
     try:

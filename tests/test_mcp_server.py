@@ -1,12 +1,26 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import httpx
 
 from clickup_agent.client import ClickUpClient
 from clickup_agent.config import ClickUpConfig
 from clickup_agent.mcp_server import _run_mcp_toolchain, create_server
+
+
+def test_mcp_status_redacts_home_path(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    env_file = tmp_path / ".config" / "clickup-agent" / ".env"
+    env_file.parent.mkdir(parents=True)
+    env_file.write_text("CLICKUP_API_KEY=pk_test\n", encoding="utf-8")
+
+    server = create_server()
+    status = server._tool_manager._tools["clickup_agent_status"].fn()
+
+    assert status["env_file"] == "~/.config/clickup-agent/.env"
+    assert str(tmp_path) not in json.dumps(status)
 
 
 def test_mcp_registers_direct_clickup_tools() -> None:
@@ -20,29 +34,76 @@ def test_mcp_registers_direct_clickup_tools() -> None:
         "clickup_agent_status",
         "clickup_agent_tooling_plan",
         "clickup_agent_search",
+        "clickup_agent_list_hierarchy",
         "clickup_agent_create_task",
+        "clickup_agent_create_subtask",
         "clickup_agent_set_status",
+        "clickup_agent_set_description",
+        "clickup_agent_update_task",
         "clickup_agent_assign",
+        "clickup_agent_assign_me",
         "clickup_agent_set_due_date",
         "clickup_agent_comment",
+        "clickup_agent_edit_comment",
+        "clickup_agent_create_checklist",
+        "clickup_agent_create_checklist_item",
+        "clickup_agent_check_item",
+        "clickup_agent_subtasks",
         "clickup_agent_tags",
         "clickup_agent_timer",
     } <= names
 
 
-def test_mcp_write_toolchains_default_to_dry_run() -> None:
-    result = _run_mcp_toolchain("create-task", {"list_id": "123", "name": "Ship it"})
+def test_mcp_tooling_plan_omits_operation_samples_by_default() -> None:
+    server = create_server()
+    plan = server._tool_manager._tools["clickup_agent_tooling_plan"].fn()
 
-    assert result["ok"] is True
-    assert result["dry_run"] is True
-    assert result["operations"][0]["operation_id"] == "CreateTask"
-    assert result["operations"][0]["path"] == "/v2/list/123/task"
+    assert "sample_operations" not in plan
+    assert len(json.dumps(plan)) < 5000
+
+
+def test_mcp_tooling_plan_uses_compact_operation_samples_when_requested() -> None:
+    server = create_server()
+    plan = server._tool_manager._tools["clickup_agent_tooling_plan"].fn(include_samples=True)
+
+    sample = plan["sample_operations"][0]
+
+    assert "request_schema" not in sample
+    assert "response_schema" not in sample
+    assert {"name", "method", "path", "tags", "write", "summary"} <= set(sample)
+
+
+def test_mcp_write_toolchains_default_to_dry_run() -> None:
+    cases = [
+        ("create-task", {"list_id": "123", "name": "Ship it"}, "CreateTask"),
+        ("create-subtask", {"list_id": "123", "parent": "abc", "name": "Sub"}, "CreateTask"),
+        ("set-status", {"task_id": "abc", "status": "done"}, "UpdateTask"),
+        ("set-description", {"task_id": "abc", "description": "Plain"}, "UpdateTask"),
+        ("update-task", {"task_id": "abc", "name": "Renamed"}, "UpdateTask"),
+        ("assign", {"task_id": "abc", "assignees": [42]}, "UpdateTask"),
+        ("assign-me", {"task_id": "abc"}, "GetAuthorizedUser"),
+        ("set-due-date", {"task_id": "abc", "due_date_iso": "2026-05-01"}, "UpdateTask"),
+        ("comment", {"task_id": "abc", "text": "Ready"}, "CreateTaskComment"),
+        ("edit-comment", {"comment_id": "cmt", "text": "Updated", "assignee": 42, "resolved": True}, "UpdateComment"),
+        ("create-checklist", {"task_id": "abc", "name": "Launch"}, "CreateChecklist"),
+        ("create-checklist-item", {"checklist_id": "chk", "name": "Verify"}, "CreateChecklistItem"),
+        ("check-item", {"checklist_id": "chk", "item_id": "it", "resolved": True}, "EditChecklistItem"),
+        ("tags", {"task_id": "abc", "add": ["review"]}, "AddTagToTask"),
+        ("timer", {"action": "start", "team_id": "456", "task_id": "abc"}, "StartatimeEntry"),
+    ]
+
+    for name, payload, operation_id in cases:
+        result = _run_mcp_toolchain(name, payload)
+
+        assert result["ok"] is True
+        assert result["dry_run"] is True
+        assert result["operations"][0]["operation_id"] == operation_id
 
 
 def test_mcp_live_toolchain_uses_runner_client(monkeypatch) -> None:
     requests: list[httpx.Request] = []
 
-    def client_factory(_: str | None) -> ClickUpClient:
+    def client_factory() -> ClickUpClient:
         def handler(request: httpx.Request) -> httpx.Response:
             requests.append(request)
             return httpx.Response(200, json={"id": "task-1"})
@@ -58,6 +119,50 @@ def test_mcp_live_toolchain_uses_runner_client(monkeypatch) -> None:
     assert result["response"] == {"id": "task-1"}
     assert requests[0].method == "POST"
     assert requests[0].url.path == "/api/v2/list/123/task"
+
+
+def test_mcp_list_hierarchy_live_execution_uses_runner_client(monkeypatch) -> None:
+    requests: list[httpx.Request] = []
+
+    def client_factory() -> ClickUpClient:
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            if request.url.path == "/api/v2/team/123/space":
+                return httpx.Response(200, json={"spaces": []})
+            return httpx.Response(404, request=request)
+
+        return ClickUpClient(ClickUpConfig(api_key="pk_test"), transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr("clickup_agent.toolchains.ClickUpClient.from_environment", client_factory)
+
+    result = _run_mcp_toolchain("list-hierarchy", {"team_id": "123"}, live=True)
+
+    assert result["ok"] is True
+    assert result["dry_run"] is False
+    assert result["response"] == {"workspaces": [{"id": "123", "name": None, "spaces": []}]}
+    assert requests[0].method == "GET"
+    assert requests[0].url.path == "/api/v2/team/123/space"
+
+
+def test_mcp_subtasks_live_execution_uses_runner_client(monkeypatch) -> None:
+    requests: list[httpx.Request] = []
+
+    def client_factory() -> ClickUpClient:
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            return httpx.Response(200, json={"id": "abc", "subtasks": [{"id": "sub-1"}]})
+
+        return ClickUpClient(ClickUpConfig(api_key="pk_test"), transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr("clickup_agent.toolchains.ClickUpClient.from_environment", client_factory)
+
+    result = _run_mcp_toolchain("subtasks", {"task_id": "abc"}, live=True)
+
+    assert result["ok"] is True
+    assert result["dry_run"] is False
+    assert result["response"] == {"task_id": "abc", "subtasks": [{"id": "sub-1"}]}
+    assert requests[0].method == "GET"
+    assert requests[0].url.path == "/api/v2/task/abc"
 
 
 def test_mcp_toolchain_errors_are_structured() -> None:

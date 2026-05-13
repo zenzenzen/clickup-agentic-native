@@ -10533,12 +10533,32 @@
       "summary": "Search and filter tasks across a workspace or list."
     },
     {
+      "is_write": false,
+      "name": "list-hierarchy",
+      "operation_ids": [
+        "GetAuthorizedTeams",
+        "GetSpaces",
+        "GetFolders",
+        "GetLists",
+        "GetFolderlessLists"
+      ],
+      "summary": "List workspace, space, folder, and list names and IDs."
+    },
+    {
       "is_write": true,
       "name": "create-task",
       "operation_ids": [
         "CreateTask"
       ],
       "summary": "Create a task in a ClickUp list."
+    },
+    {
+      "is_write": true,
+      "name": "create-subtask",
+      "operation_ids": [
+        "CreateTask"
+      ],
+      "summary": "Create a subtask under a parent task."
     },
     {
       "is_write": true,
@@ -10550,12 +10570,37 @@
     },
     {
       "is_write": true,
+      "name": "set-description",
+      "operation_ids": [
+        "UpdateTask"
+      ],
+      "summary": "Update a task description (plain or markdown)."
+    },
+    {
+      "is_write": true,
+      "name": "update-task",
+      "operation_ids": [
+        "UpdateTask"
+      ],
+      "summary": "Update arbitrary fields on a task."
+    },
+    {
+      "is_write": true,
       "name": "assign",
       "operation_ids": [
         "GetTask",
         "UpdateTask"
       ],
       "summary": "Add, remove, or replace task assignees."
+    },
+    {
+      "is_write": true,
+      "name": "assign-me",
+      "operation_ids": [
+        "GetAuthorizedUser",
+        "UpdateTask"
+      ],
+      "summary": "Assign the authorized user to a task."
     },
     {
       "is_write": true,
@@ -10572,6 +10617,46 @@
         "CreateTaskComment"
       ],
       "summary": "Add a comment to a task."
+    },
+    {
+      "is_write": true,
+      "name": "edit-comment",
+      "operation_ids": [
+        "UpdateComment"
+      ],
+      "summary": "Edit an existing comment."
+    },
+    {
+      "is_write": true,
+      "name": "create-checklist",
+      "operation_ids": [
+        "CreateChecklist"
+      ],
+      "summary": "Create a checklist on a task."
+    },
+    {
+      "is_write": true,
+      "name": "create-checklist-item",
+      "operation_ids": [
+        "CreateChecklistItem"
+      ],
+      "summary": "Add an item to a checklist."
+    },
+    {
+      "is_write": true,
+      "name": "check-item",
+      "operation_ids": [
+        "EditChecklistItem"
+      ],
+      "summary": "Edit a checklist item (resolve, rename, reparent, reassign)."
+    },
+    {
+      "is_write": false,
+      "name": "subtasks",
+      "operation_ids": [
+        "GetTask"
+      ],
+      "summary": "Fetch a task with its subtasks expanded."
     },
     {
       "is_write": true,
