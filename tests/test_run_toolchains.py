@@ -81,6 +81,44 @@ def test_list_hierarchy_dry_run_from_cli(capsys) -> None:
     assert payload["operations"][0]["path"] == "/v2/folder/folder-1/list"
 
 
+def test_resolve_user_dry_run_supports_current_user_and_workspace_lookup(capsys) -> None:
+    assert main(["run", "resolve-user", "--dry-run", "--self"]) == 0
+    payload = _json_output(capsys)
+
+    assert payload["dry_run"] is True
+    assert payload["operations"][0]["operation_id"] == "GetAuthorizedUser"
+    assert payload["operations"][0]["path"] == "/v2/user"
+    assert "authorized ClickUp user" in payload["operations"][0]["note"]
+
+    assert main(["run", "resolve-user", "--dry-run", "--team-id", "123", "--query", "ada"]) == 0
+    payload = _json_output(capsys)
+
+    assert payload["operations"][0]["operation_id"] == "GetAuthorizedTeams"
+    assert payload["operations"][0]["client_filter"] == {"query": "ada", "team_id": "123"}
+
+
+def test_resolve_task_dry_run_supports_url_custom_id_and_query(capsys) -> None:
+    assert main(["run", "resolve-task", "--dry-run", "--url", "https://app.clickup.com/t/abc123"]) == 0
+    payload = _json_output(capsys)
+
+    assert payload["dry_run"] is True
+    assert payload["operations"][0]["operation_id"] == "GetTask"
+    assert payload["operations"][0]["path"] == "/v2/task/abc123"
+
+    assert main(["run", "resolve-task", "--dry-run", "--custom-id", "ENG-42", "--team-id", "123"]) == 0
+    payload = _json_output(capsys)
+
+    assert payload["operations"][0]["path"] == "/v2/task/ENG-42"
+    assert payload["operations"][0]["params"] == {"custom_task_ids": True, "team_id": "123"}
+
+    assert main(["run", "resolve-task", "--dry-run", "--list-id", "456", "--query", "ship"]) == 0
+    payload = _json_output(capsys)
+
+    assert payload["operations"][0]["operation_id"] == "GetTasks"
+    assert payload["operations"][0]["path"] == "/v2/list/456/task"
+    assert payload["operations"][0]["client_filter"] == {"query": "ship"}
+
+
 def test_new_task_checklist_comment_hotkeys_dry_run(capsys) -> None:
     commands = [
         (
@@ -340,6 +378,97 @@ def test_list_hierarchy_live_execution_returns_only_names_and_ids() -> None:
             }
         ]
     }
+
+
+def test_resolve_user_live_execution_filters_authorized_workspace_members() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "teams": [
+                    {
+                        "id": "123",
+                        "name": "Engineering",
+                        "members": [
+                            {"user": {"id": 42, "username": "Ada Lovelace", "email": "ada@example.com"}},
+                            {"user": {"id": 99, "username": "Grace Hopper", "email": "grace@example.com"}},
+                        ],
+                    }
+                ]
+            },
+        )
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    result = runner.run("resolve-user", ["--query", "ada", "--team-id", "123"])
+
+    assert requests[0].method == "GET"
+    assert requests[0].url.path == "/api/v2/team"
+    assert result.response == {
+        "mode": "workspace_lookup",
+        "match_count": 1,
+        "matches": [
+            {
+                "id": "42",
+                "username": "Ada Lovelace",
+                "email": "ada@example.com",
+                "workspaces": [{"id": "123", "name": "Engineering"}],
+            }
+        ],
+        "resolved": {
+            "id": "42",
+            "username": "Ada Lovelace",
+            "email": "ada@example.com",
+            "workspaces": [{"id": "123", "name": "Engineering"}],
+        },
+    }
+
+
+def test_resolve_task_live_execution_gets_and_searches_tasks() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/api/v2/task/abc":
+            return httpx.Response(200, json={"id": "abc", "name": "Ship it", "custom_id": "ENG-1"})
+        if request.url.path == "/api/v2/list/456/task":
+            return httpx.Response(
+                200,
+                json={
+                    "tasks": [
+                        {"id": "abc", "name": "Ship it", "url": "https://app.clickup.com/t/abc"},
+                        {"id": "def", "name": "Later"},
+                    ]
+                },
+            )
+        return httpx.Response(404, request=request)
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    by_url = runner.run("resolve-task", ["--url", "https://app.clickup.com/t/abc"])
+    by_query = runner.run("resolve-task", ["--list-id", "456", "--query", "ship"])
+
+    assert by_url.response == {"mode": "task_id", "task": {"id": "abc", "custom_id": "ENG-1", "name": "Ship it"}}
+    assert by_query.response == {
+        "mode": "search",
+        "match_count": 1,
+        "matches": [{"id": "abc", "name": "Ship it", "url": "https://app.clickup.com/t/abc"}],
+        "resolved": {"id": "abc", "name": "Ship it", "url": "https://app.clickup.com/t/abc"},
+    }
+    assert [request.url.path for request in requests] == ["/api/v2/task/abc", "/api/v2/list/456/task"]
 
 
 def test_new_hotkeys_live_execution_uses_mocked_http() -> None:
