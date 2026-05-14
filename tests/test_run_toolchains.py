@@ -119,6 +119,29 @@ def test_resolve_task_dry_run_supports_url_custom_id_and_query(capsys) -> None:
     assert payload["operations"][0]["client_filter"] == {"query": "ship"}
 
 
+def test_inspect_task_and_audit_assigned_dry_runs(capsys) -> None:
+    assert main(["run", "inspect-task", "--dry-run", "--task-id", "abc", "--include-comments"]) == 0
+    payload = _json_output(capsys)
+
+    assert payload["dry_run"] is True
+    assert [operation["operation_id"] for operation in payload["operations"]] == ["GetTask", "GetTaskComments"]
+    assert payload["operations"][0]["path"] == "/v2/task/abc"
+    assert payload["operations"][1]["path"] == "/v2/task/abc/comment"
+
+    assert main(["run", "audit-assigned", "--dry-run", "--team-id", "123", "--assignee", "42"]) == 0
+    payload = _json_output(capsys)
+
+    assert payload["operations"][0]["operation_id"] == "GetFilteredTeamTasks"
+    assert payload["operations"][0]["path"] == "/v2/team/123/task"
+    assert payload["operations"][0]["params"] == {"assignees[]": ["42"]}
+
+    assert main(["run", "audit-assigned", "--dry-run", "--team-id", "123"]) == 0
+    payload = _json_output(capsys)
+
+    assert [operation["operation_id"] for operation in payload["operations"]] == ["GetAuthorizedUser", "GetFilteredTeamTasks"]
+    assert payload["operations"][1]["params"] == {"assignees[]": ["<self>"]}
+
+
 def test_new_task_checklist_comment_hotkeys_dry_run(capsys) -> None:
     commands = [
         (
@@ -469,6 +492,94 @@ def test_resolve_task_live_execution_gets_and_searches_tasks() -> None:
         "resolved": {"id": "abc", "name": "Ship it", "url": "https://app.clickup.com/t/abc"},
     }
     assert [request.url.path for request in requests] == ["/api/v2/task/abc", "/api/v2/list/456/task"]
+
+
+def test_inspect_task_live_execution_reports_gaps_and_summaries() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/api/v2/task/abc":
+            return httpx.Response(
+                200,
+                json={
+                    "id": "abc",
+                    "name": "Ship it",
+                    "description": "## Context\nWork\n## Acceptance Criteria\nDone\nhttps://github.com/acme/pr/1",
+                    "assignees": [{"id": 42, "username": "Ada"}],
+                    "due_date": "4102444800000",
+                    "points": 3,
+                    "time_estimate": 3600000,
+                    "checklists": [{"id": "chk", "name": "Review", "items": [{"resolved": True}, {"resolved": False}]}],
+                    "subtasks": [{"id": "sub", "name": "Sub"}],
+                },
+            )
+        if request.url.path == "/api/v2/task/abc/comment":
+            return httpx.Response(200, json={"comments": [{"id": "c1", "comment_text": "Looks good"}]})
+        return httpx.Response(404, request=request)
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    result = runner.run("inspect-task", ["--task-id", "abc", "--include-comments", "--include-subtasks"])
+
+    assert [request.url.path for request in requests] == ["/api/v2/task/abc", "/api/v2/task/abc/comment"]
+    assert result.response["description_sections"] == ["Context", "Acceptance Criteria"]
+    assert result.response["checklist_summary"] == {"count": 1, "item_count": 2, "resolved_count": 1}
+    assert result.response["subtask_summary"] == {"count": 1}
+    assert result.response["comment_summary"] == {"count": 1, "returned": 1}
+    assert result.response["links"] == ["https://github.com/acme/pr/1"]
+    assert result.response["findings"] == []
+
+
+def test_audit_assigned_live_execution_flags_task_cleanup_gaps() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/api/v2/user":
+            return httpx.Response(200, json={"user": {"id": 42}})
+        if request.url.path == "/api/v2/team/123/task":
+            return httpx.Response(
+                200,
+                json={
+                    "tasks": [
+                        {
+                            "id": "abc",
+                            "name": "Needs cleanup",
+                            "description": "",
+                            "assignees": [{"id": 42}],
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(404, request=request)
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    result = runner.run("audit-assigned", ["--team-id", "123"])
+
+    assert [request.url.path for request in requests] == ["/api/v2/user", "/api/v2/team/123/task"]
+    assert result.operations[1]["params"]["assignees[]"] == ["42"]
+    assert result.response["task_count"] == 1
+    assert result.response["tasks_with_findings"] == 1
+    assert result.response["findings"][0]["findings"] == [
+        "missing-description",
+        "missing-due-date",
+        "missing-points",
+        "missing-time-estimate",
+        "missing-checklist",
+        "missing-external-link",
+    ]
 
 
 def test_new_hotkeys_live_execution_uses_mocked_http() -> None:

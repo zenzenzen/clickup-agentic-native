@@ -43,6 +43,18 @@ TOOLCHAINS = [
         "is_write": False,
     },
     {
+        "name": "inspect-task",
+        "summary": "Inspect a task for documentation, checklist, comment, link, and planning gaps.",
+        "operation_ids": ["GetTask", "GetTaskComments"],
+        "is_write": False,
+    },
+    {
+        "name": "audit-assigned",
+        "summary": "Audit assigned tasks for professional cleanup gaps and proposed next actions.",
+        "operation_ids": ["GetAuthorizedUser", "GetFilteredTeamTasks"],
+        "is_write": False,
+    },
+    {
         "name": "create-task",
         "summary": "Create a task in a ClickUp list.",
         "operation_ids": ["CreateTask"],
