@@ -187,9 +187,12 @@ Development should move in small, easy-to-review steps.
 Future implementation passes should expand:
 
 - A context/session layer for resolving workspace, list, task, doc, user, group, and channel references.
+- Quality-of-life workflows for assigned-work audits, task documentation upkeep, decision capture, planning metadata backfill, time entry management, and external work links.
 - Full comments capability for task, list, view, and threaded comments.
 - Tasks, docs, users, guests, user groups, lists, attachments, webhooks, and time tracking coverage.
 - Pagination helpers, richer rate-limit handling, and broader generated-operation execution.
+
+See `references/quality-of-life-roadmap.md` for the professional workflow roadmap.
 
 ## Secret Handling
 
