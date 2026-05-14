@@ -100,7 +100,10 @@ The committed catalog is generated from the official ClickUp V2 OpenAPI spec and
 
 - Full comments coverage for list/view/threaded comments
 - Link an existing branch PR into the related ClickUp task for development-reference parity
+- Professional quality-of-life workflows for assigned-work audits, documentation upkeep, explicit decision capture, planning metadata backfill, time entry backfill, and external resource linking
 - Docs, chat, attachments, webhooks, admin workflows, and broader hierarchy/entity resolution
+
+See `references/quality-of-life-roadmap.md` for the detailed workflow roadmap.
 
 ## Accuracy Rule
 

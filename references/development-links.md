@@ -25,7 +25,7 @@ Do not duplicate the same PR link repeatedly. First search or inspect recent tas
 
 ## Current Scaffold Behavior
 
-The current agent has not implemented ClickUp write tools yet. Until then, agents should surface the PR URL in their planned ClickUp update and clearly state that task linking is pending native ClickUp tool implementation.
+The current agent has task comments and task description updates, so development links can be carried into ClickUp today through those fallbacks. Dedicated development/reference custom field discovery and duplicate-safe link updates are still planned.
 
 ## Example Task Comment Shape
 
