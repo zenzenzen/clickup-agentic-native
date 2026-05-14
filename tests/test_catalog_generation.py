@@ -83,6 +83,8 @@ def test_normalize_catalog_extracts_operations_and_toolchains() -> None:
         "resolve-task",
         "inspect-task",
         "audit-assigned",
+        "link-resource",
+        "apply-task-template",
         "create-task",
         "timer",
     }

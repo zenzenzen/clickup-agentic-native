@@ -39,6 +39,8 @@ def test_mcp_registers_direct_clickup_tools() -> None:
         "clickup_agent_resolve_task",
         "clickup_agent_inspect_task",
         "clickup_agent_audit_assigned",
+        "clickup_agent_link_resource",
+        "clickup_agent_apply_task_template",
         "clickup_agent_create_task",
         "clickup_agent_create_subtask",
         "clickup_agent_set_status",
@@ -92,6 +94,8 @@ def test_mcp_write_toolchains_default_to_dry_run() -> None:
         ("create-checklist", {"task_id": "abc", "name": "Launch"}, "CreateChecklist"),
         ("create-checklist-item", {"checklist_id": "chk", "name": "Verify"}, "CreateChecklistItem"),
         ("check-item", {"checklist_id": "chk", "item_id": "it", "resolved": True}, "EditChecklistItem"),
+        ("link-resource", {"task_id": "abc", "url": "https://github.com/acme/pr/1"}, "GetTask"),
+        ("apply-task-template", {"task_id": "abc", "context": "Why"}, "GetTask"),
         ("tags", {"task_id": "abc", "add": ["review"]}, "AddTagToTask"),
         ("timer", {"action": "start", "team_id": "456", "task_id": "abc"}, "StartatimeEntry"),
     ]

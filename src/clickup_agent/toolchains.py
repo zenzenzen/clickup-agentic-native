@@ -79,6 +79,8 @@ class ToolchainRunner:
             "resolve-task": _run_resolve_task,
             "inspect-task": _run_inspect_task,
             "audit-assigned": _run_audit_assigned,
+            "link-resource": _run_link_resource,
+            "apply-task-template": _run_apply_task_template,
             "create-task": _run_create_task,
             "create-subtask": _run_create_subtask,
             "set-status": _run_set_status,
@@ -1112,6 +1114,179 @@ def _configure_audit_assigned(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--include-closed", action="store_true", default=None)
     parser.add_argument("--page", type=int)
     parser.add_argument("--limit", type=int)
+
+
+def _run_link_resource(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_link_resource)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    task_id = payload.pop("task_id", None)
+    url = str(payload.pop("url", "") or "").strip()
+    if not task_id or not url:
+        raise ToolchainError("link-resource requires --task-id and --url")
+    title = str(payload.pop("title", "") or "").strip()
+    kind = str(payload.pop("kind", "Resource") or "Resource").strip()
+    note = str(payload.pop("note", "") or "").strip()
+    include_comments = _bool(payload.pop("include_comments"), field="include_comments") if "include_comments" in payload else True
+    task_payload = {
+        key: value
+        for key, value in payload.items()
+        if key in {"custom_task_ids", "team_id"}
+    }
+    task_payload["task_id"] = task_id
+
+    task_operation, task_response = _execute_operation(catalog, "GetTask", task_payload, dry_run=options.dry_run, client=client)
+    operations = [task_operation]
+    comments_response = None
+    if include_comments:
+        comments_operation, comments_response = _execute_operation(
+            catalog,
+            "GetTaskComments",
+            task_payload,
+            dry_run=options.dry_run,
+            client=client,
+        )
+        operations.append(comments_operation)
+
+    comment_text = _resource_comment(kind=kind, title=title, url=url, note=note)
+    create_payload = {
+        **task_payload,
+        "body": {"comment_text": comment_text, "notify_all": False},
+    }
+    if options.dry_run:
+        create_operation, _ = _execute_operation(
+            catalog,
+            "CreateTaskComment",
+            create_payload,
+            dry_run=True,
+            client=client,
+        )
+        create_operation["note"] = "Live run skips comment creation when the resource URL already exists on the task."
+        operations.append(create_operation)
+        return RunResult(options.name, True, operations)
+
+    if _resource_link_exists(url, task_response, comments_response):
+        return RunResult(
+            options.name,
+            False,
+            operations,
+            {"created": False, "reason": "duplicate-resource-link", "url": url},
+        )
+    create_operation, create_response = _execute_operation(
+        catalog,
+        "CreateTaskComment",
+        create_payload,
+        dry_run=False,
+        client=client,
+    )
+    operations.append(create_operation)
+    return RunResult(options.name, False, operations, {"created": True, "url": url, "comment": create_response})
+
+
+def _configure_link_resource(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", required=False)
+    parser.add_argument("--url")
+    parser.add_argument("--title")
+    parser.add_argument("--kind", default=None)
+    parser.add_argument("--note")
+    parser.add_argument("--include-comments", action="store_true", default=None)
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
+
+
+def _resource_comment(*, kind: str, title: str, url: str, note: str) -> str:
+    lines = ["Development reference:"]
+    label = f"{kind}: {title}" if title else kind
+    lines.append(f"- {label}: {url}")
+    if note:
+        lines.append(f"- Note: {note}")
+    return "\n".join(lines)
+
+
+def _resource_link_exists(url: str, task_response: Any, comments_response: Any) -> bool:
+    haystack: list[str] = []
+    if isinstance(task_response, dict):
+        haystack.extend(str(task_response.get(key, "")) for key in ("url", "description", "markdown_description", "text_content"))
+    for comment in _items(comments_response, "comments"):
+        if isinstance(comment, dict):
+            haystack.extend(str(comment.get(key, "")) for key in ("comment_text", "text_content"))
+    return url in "\n".join(haystack)
+
+
+def _run_apply_task_template(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_apply_task_template)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    task_id = payload.pop("task_id", None)
+    if not task_id:
+        raise ToolchainError("apply-task-template requires --task-id")
+    task_payload = {
+        key: value
+        for key, value in payload.items()
+        if key in {"custom_task_ids", "team_id", "include_markdown_description"}
+    }
+    task_payload["task_id"] = task_id
+    section_payload = {
+        "Context": payload.pop("context", ""),
+        "Decision Log": payload.pop("decision", ""),
+        "Acceptance Criteria": payload.pop("acceptance", ""),
+        "Implementation Notes": payload.pop("implementation_notes", ""),
+        "External Links": payload.pop("external_link", ""),
+        "Review Notes": payload.pop("review_notes", ""),
+    }
+
+    task_operation, task_response = _execute_operation(catalog, "GetTask", task_payload, dry_run=options.dry_run, client=client)
+    if options.dry_run:
+        existing = ""
+    else:
+        existing = _task_description_text(task_response)
+    proposed, added_sections = _apply_template_sections(existing, section_payload)
+    update_payload = {
+        key: value
+        for key, value in task_payload.items()
+        if key in {"task_id", "custom_task_ids", "team_id"}
+    }
+    update_payload["body"] = {"markdown_content": proposed}
+    update_operation, update_response = _execute_operation(
+        catalog,
+        "UpdateTask",
+        update_payload,
+        dry_run=options.dry_run,
+        client=client,
+    )
+    if options.dry_run:
+        update_operation["note"] = "Live run preserves existing sections and appends only missing standard sections."
+    return RunResult(
+        options.name,
+        options.dry_run,
+        [task_operation, update_operation],
+        None if options.dry_run else {"added_sections": added_sections, "markdown_content": proposed, "response": update_response},
+    )
+
+
+def _configure_apply_task_template(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", required=False)
+    parser.add_argument("--context")
+    parser.add_argument("--decision")
+    parser.add_argument("--acceptance")
+    parser.add_argument("--implementation-notes", dest="implementation_notes")
+    parser.add_argument("--external-link", dest="external_link")
+    parser.add_argument("--review-notes", dest="review_notes")
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
+    parser.add_argument("--include-markdown-description", action="store_true", default=None)
+
+
+def _apply_template_sections(existing: str, section_values: dict[str, Any]) -> tuple[str, list[str]]:
+    sections = set(_markdown_sections(existing))
+    content = existing.rstrip()
+    added: list[str] = []
+    for heading, raw_value in section_values.items():
+        if heading in sections:
+            continue
+        value = str(raw_value or "").strip() or "_TBD_"
+        block = f"## {heading}\n{value}"
+        content = f"{content}\n\n{block}" if content else block
+        added.append(heading)
+    return f"{content}\n", added
 
 
 def _run_create_task(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
