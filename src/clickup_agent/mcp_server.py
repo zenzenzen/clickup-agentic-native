@@ -101,6 +101,8 @@ def create_server() -> FastMCP:
                 "clickup-agent run resolve-task",
                 "clickup-agent run inspect-task",
                 "clickup-agent run audit-assigned",
+                "clickup-agent run link-resource",
+                "clickup-agent run apply-task-template",
                 "clickup-agent run create-task",
                 "clickup-agent run create-subtask",
                 "clickup-agent run set-status",
@@ -287,6 +289,66 @@ def create_server() -> FastMCP:
                 include_closed=include_closed,
                 page=page,
                 limit=limit,
+            ),
+            live=live,
+        )
+
+    @server.tool()
+    def clickup_agent_link_resource(
+        task_id: str,
+        url: str,
+        title: str | None = None,
+        kind: str | None = None,
+        note: str | None = None,
+        include_comments: bool | None = None,
+        custom_task_ids: bool | None = None,
+        team_id: str | None = None,
+        live: bool = False,
+    ) -> dict[str, Any]:
+        """Attach an external resource link to a task. Defaults to dry-run unless live is true."""
+        return _run_mcp_toolchain(
+            "link-resource",
+            _payload_without_none(
+                task_id=task_id,
+                url=url,
+                title=title,
+                kind=kind,
+                note=note,
+                include_comments=include_comments,
+                custom_task_ids=custom_task_ids,
+                team_id=team_id,
+            ),
+            live=live,
+        )
+
+    @server.tool()
+    def clickup_agent_apply_task_template(
+        task_id: str,
+        context: str | None = None,
+        decision: str | None = None,
+        acceptance: str | None = None,
+        implementation_notes: str | None = None,
+        external_link: str | None = None,
+        review_notes: str | None = None,
+        custom_task_ids: bool | None = None,
+        team_id: str | None = None,
+        include_markdown_description: bool | None = None,
+        live: bool = False,
+    ) -> dict[str, Any]:
+        """Apply standard task documentation sections. Defaults to dry-run unless live is true."""
+        return _run_mcp_toolchain(
+            "apply-task-template",
+            _payload_without_none(
+                task_id=task_id,
+                context=context,
+                decision=decision,
+                acceptance=acceptance,
+                implementation_notes=implementation_notes,
+                external_link=external_link,
+                review_notes=review_notes,
+                custom_task_ids=custom_task_ids,
+                team_id=team_id,
+                include_markdown_description=include_markdown_description,
             ),
             live=live,
         )

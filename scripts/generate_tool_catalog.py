@@ -55,6 +55,18 @@ TOOLCHAINS = [
         "is_write": False,
     },
     {
+        "name": "link-resource",
+        "summary": "Attach an external resource link to a task with duplicate avoidance.",
+        "operation_ids": ["GetTask", "GetTaskComments", "CreateTaskComment"],
+        "is_write": True,
+    },
+    {
+        "name": "apply-task-template",
+        "summary": "Apply standard task documentation sections while preserving existing content.",
+        "operation_ids": ["GetTask", "UpdateTask"],
+        "is_write": True,
+    },
+    {
         "name": "create-task",
         "summary": "Create a task in a ClickUp list.",
         "operation_ids": ["CreateTask"],

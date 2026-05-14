@@ -142,6 +142,63 @@ def test_inspect_task_and_audit_assigned_dry_runs(capsys) -> None:
     assert payload["operations"][1]["params"] == {"assignees[]": ["<self>"]}
 
 
+def test_link_resource_and_apply_template_dry_runs(capsys) -> None:
+    assert (
+        main(
+            [
+                "run",
+                "link-resource",
+                "--dry-run",
+                "--task-id",
+                "abc",
+                "--url",
+                "https://github.com/acme/pr/1",
+                "--title",
+                "PR 1",
+                "--kind",
+                "PR",
+            ]
+        )
+        == 0
+    )
+    payload = _json_output(capsys)
+
+    assert payload["dry_run"] is True
+    assert [operation["operation_id"] for operation in payload["operations"]] == [
+        "GetTask",
+        "GetTaskComments",
+        "CreateTaskComment",
+    ]
+    assert payload["operations"][2]["json"] == {
+        "comment_text": "Development reference:\n- PR: PR 1: https://github.com/acme/pr/1",
+        "notify_all": False,
+    }
+
+    assert (
+        main(
+            [
+                "run",
+                "apply-task-template",
+                "--dry-run",
+                "--task-id",
+                "abc",
+                "--context",
+                "Why this matters",
+                "--acceptance",
+                "Done when tested",
+            ]
+        )
+        == 0
+    )
+    payload = _json_output(capsys)
+
+    assert payload["operations"][0]["operation_id"] == "GetTask"
+    assert payload["operations"][1]["operation_id"] == "UpdateTask"
+    markdown = payload["operations"][1]["json"]["markdown_content"]
+    assert "## Context\nWhy this matters" in markdown
+    assert "## Acceptance Criteria\nDone when tested" in markdown
+
+
 def test_new_task_checklist_comment_hotkeys_dry_run(capsys) -> None:
     commands = [
         (
@@ -579,6 +636,78 @@ def test_audit_assigned_live_execution_flags_task_cleanup_gaps() -> None:
         "missing-time-estimate",
         "missing-checklist",
         "missing-external-link",
+    ]
+
+
+def test_link_resource_live_execution_skips_duplicate_and_comments_new_link() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/api/v2/task/abc":
+            return httpx.Response(200, json={"id": "abc", "description": "Existing https://github.com/acme/pr/1"})
+        if request.url.path == "/api/v2/task/def":
+            return httpx.Response(200, json={"id": "def", "description": ""})
+        if request.url.path in {"/api/v2/task/abc/comment", "/api/v2/task/def/comment"} and request.method == "GET":
+            return httpx.Response(200, json={"comments": []})
+        if request.url.path == "/api/v2/task/def/comment" and request.method == "POST":
+            return httpx.Response(200, json={"id": "comment-1"})
+        return httpx.Response(404, request=request)
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    duplicate = runner.run("link-resource", ["--live", "--task-id", "abc", "--url", "https://github.com/acme/pr/1"])
+    created = runner.run("link-resource", ["--live", "--task-id", "def", "--url", "https://github.com/acme/pr/2"])
+
+    assert duplicate.response == {
+        "created": False,
+        "reason": "duplicate-resource-link",
+        "url": "https://github.com/acme/pr/1",
+    }
+    assert created.response == {"created": True, "url": "https://github.com/acme/pr/2", "comment": {"id": "comment-1"}}
+    assert [request.method for request in requests] == ["GET", "GET", "GET", "GET", "POST"]
+
+
+def test_apply_task_template_live_execution_preserves_existing_sections() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.method == "GET":
+            return httpx.Response(200, json={"id": "abc", "markdown_description": "## Context\nExisting\n"})
+        assert json.loads(request.content) == {
+            "markdown_content": (
+                "## Context\nExisting\n\n"
+                "## Decision Log\n_TBD_\n\n"
+                "## Acceptance Criteria\nDone when tested\n\n"
+                "## Implementation Notes\n_TBD_\n\n"
+                "## External Links\n_TBD_\n\n"
+                "## Review Notes\n_TBD_\n"
+            )
+        }
+        return httpx.Response(200, json={"id": "abc"})
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    result = runner.run("apply-task-template", ["--live", "--task-id", "abc", "--acceptance", "Done when tested"])
+
+    assert [request.method for request in requests] == ["GET", "PUT"]
+    assert result.response["added_sections"] == [
+        "Decision Log",
+        "Acceptance Criteria",
+        "Implementation Notes",
+        "External Links",
+        "Review Notes",
     ]
 
 
