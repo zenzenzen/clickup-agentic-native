@@ -35,6 +35,8 @@ def test_mcp_registers_direct_clickup_tools() -> None:
         "clickup_agent_tooling_plan",
         "clickup_agent_search",
         "clickup_agent_list_hierarchy",
+        "clickup_agent_resolve_user",
+        "clickup_agent_resolve_task",
         "clickup_agent_create_task",
         "clickup_agent_create_subtask",
         "clickup_agent_set_status",
@@ -142,6 +144,41 @@ def test_mcp_list_hierarchy_live_execution_uses_runner_client(monkeypatch) -> No
     assert result["response"] == {"workspaces": [{"id": "123", "name": None, "spaces": []}]}
     assert requests[0].method == "GET"
     assert requests[0].url.path == "/api/v2/team/123/space"
+
+
+def test_mcp_resolution_tools_expose_dry_run_wrappers() -> None:
+    user_result = _run_mcp_toolchain("resolve-user", {"current_user": True})
+    task_result = _run_mcp_toolchain("resolve-task", {"url": "https://app.clickup.com/t/abc"})
+
+    assert user_result["ok"] is True
+    assert user_result["dry_run"] is True
+    assert user_result["operations"][0]["operation_id"] == "GetAuthorizedUser"
+
+    assert task_result["ok"] is True
+    assert task_result["dry_run"] is True
+    assert task_result["operations"][0]["operation_id"] == "GetTask"
+    assert task_result["operations"][0]["path"] == "/v2/task/abc"
+
+
+def test_mcp_resolve_task_live_execution_uses_runner_client(monkeypatch) -> None:
+    requests: list[httpx.Request] = []
+
+    def client_factory() -> ClickUpClient:
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            return httpx.Response(200, json={"id": "abc", "name": "Ship it"})
+
+        return ClickUpClient(ClickUpConfig(api_key="pk_test"), transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr("clickup_agent.toolchains.ClickUpClient.from_environment", client_factory)
+
+    result = _run_mcp_toolchain("resolve-task", {"task_id": "abc"}, live=True)
+
+    assert result["ok"] is True
+    assert result["dry_run"] is False
+    assert result["response"] == {"mode": "task_id", "task": {"id": "abc", "name": "Ship it"}}
+    assert requests[0].method == "GET"
+    assert requests[0].url.path == "/api/v2/task/abc"
 
 
 def test_mcp_subtasks_live_execution_uses_runner_client(monkeypatch) -> None:

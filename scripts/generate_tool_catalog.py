@@ -31,6 +31,18 @@ TOOLCHAINS = [
         "is_write": False,
     },
     {
+        "name": "resolve-user",
+        "summary": "Resolve the current user or look up workspace users by id or query.",
+        "operation_ids": ["GetAuthorizedUser", "GetAuthorizedTeams", "GetUser"],
+        "is_write": False,
+    },
+    {
+        "name": "resolve-task",
+        "summary": "Resolve a task by URL, raw id, custom id, or search query.",
+        "operation_ids": ["GetTask", "GetFilteredTeamTasks", "GetTasks"],
+        "is_write": False,
+    },
+    {
         "name": "create-task",
         "summary": "Create a task in a ClickUp list.",
         "operation_ids": ["CreateTask"],

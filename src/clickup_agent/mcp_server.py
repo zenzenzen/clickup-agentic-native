@@ -97,6 +97,8 @@ def create_server() -> FastMCP:
                 "clickup-agent hotkeys list",
                 "clickup-agent run search",
                 "clickup-agent run list-hierarchy",
+                "clickup-agent run resolve-user",
+                "clickup-agent run resolve-task",
                 "clickup-agent run create-task",
                 "clickup-agent run create-subtask",
                 "clickup-agent run set-status",
@@ -165,6 +167,66 @@ def create_server() -> FastMCP:
                 space_id=space_id,
                 folder_id=folder_id,
                 archived=archived,
+            ),
+            live=live,
+        )
+
+    @server.tool()
+    def clickup_agent_resolve_user(
+        user_id: str | None = None,
+        query: str | None = None,
+        workspace_id: str | None = None,
+        team_id: str | None = None,
+        current_user: bool | None = None,
+        include_shared: bool | None = None,
+        live: bool = True,
+    ) -> dict[str, Any]:
+        """Resolve the current user or look up workspace users by id or query."""
+        return _run_mcp_toolchain(
+            "resolve-user",
+            _payload_without_none(
+                user_id=user_id,
+                query=query,
+                workspace_id=workspace_id,
+                team_id=team_id,
+                current_user=current_user,
+                include_shared=include_shared,
+            ),
+            live=live,
+        )
+
+    @server.tool()
+    def clickup_agent_resolve_task(
+        task_id: str | None = None,
+        url: str | None = None,
+        custom_id: str | None = None,
+        query: str | None = None,
+        list_id: str | None = None,
+        workspace_id: str | None = None,
+        team_id: str | None = None,
+        custom_task_ids: bool | None = None,
+        include_subtasks: bool | None = None,
+        include_markdown_description: bool | None = None,
+        include_closed: bool | None = None,
+        page: int | None = None,
+        live: bool = True,
+    ) -> dict[str, Any]:
+        """Resolve a task by URL, raw id, custom id, or search query."""
+        return _run_mcp_toolchain(
+            "resolve-task",
+            _payload_without_none(
+                task_id=task_id,
+                url=url,
+                custom_id=custom_id,
+                query=query,
+                list_id=list_id,
+                workspace_id=workspace_id,
+                team_id=team_id,
+                custom_task_ids=custom_task_ids,
+                include_subtasks=include_subtasks,
+                include_markdown_description=include_markdown_description,
+                include_closed=include_closed,
+                page=page,
             ),
             live=live,
         )

@@ -10545,6 +10545,26 @@
       "summary": "List workspace, space, folder, and list names and IDs."
     },
     {
+      "is_write": false,
+      "name": "resolve-user",
+      "operation_ids": [
+        "GetAuthorizedUser",
+        "GetAuthorizedTeams",
+        "GetUser"
+      ],
+      "summary": "Resolve the current user or look up workspace users by id or query."
+    },
+    {
+      "is_write": false,
+      "name": "resolve-task",
+      "operation_ids": [
+        "GetTask",
+        "GetFilteredTeamTasks",
+        "GetTasks"
+      ],
+      "summary": "Resolve a task by URL, raw id, custom id, or search query."
+    },
+    {
       "is_write": true,
       "name": "create-task",
       "operation_ids": [

@@ -77,7 +77,13 @@ def test_normalize_catalog_extracts_operations_and_toolchains() -> None:
     assert operation["request_schema"]["properties"]["name"] == {"type": "string"}
     assert "examples" not in operation["request_schema"]
     assert operation["response_schema"]["statuses"]["200"]["schema_title"] == "CreateTaskResponse"
-    assert {toolchain["name"] for toolchain in catalog["toolchains"]} >= {"search", "create-task", "timer"}
+    assert {toolchain["name"] for toolchain in catalog["toolchains"]} >= {
+        "search",
+        "resolve-user",
+        "resolve-task",
+        "create-task",
+        "timer",
+    }
 
 
 def test_normalize_catalog_rejects_external_refs() -> None:

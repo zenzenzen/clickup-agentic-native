@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import re
 from dataclasses import dataclass
 from typing import Any, Callable
+from urllib.parse import unquote, urlparse
 
 from .client import ClickUpApiError, ClickUpClient
 from .config import ConfigError, load_workspace_id
@@ -72,6 +74,8 @@ class ToolchainRunner:
         self.handlers: dict[str, ToolchainHandler] = {
             "search": _run_search,
             "list-hierarchy": _run_list_hierarchy,
+            "resolve-user": _run_resolve_user,
+            "resolve-task": _run_resolve_task,
             "create-task": _run_create_task,
             "create-subtask": _run_create_subtask,
             "set-status": _run_set_status,
@@ -487,6 +491,294 @@ def _compact_named_item(item: dict[str, Any]) -> dict[str, Any]:
     compact: dict[str, Any] = {"id": str(item.get("id")) if item.get("id") is not None else None}
     if "name" in item:
         compact["name"] = item.get("name")
+    return compact
+
+
+def _run_resolve_user(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_resolve_user)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    current_user = _bool(payload.pop("current_user"), field="current_user") if "current_user" in payload else False
+    query = str(payload.pop("query", "") or "").strip()
+    user_id = payload.pop("user_id", None)
+    workspace_id = payload.pop("workspace_id", None) or payload.pop("team_id", None)
+    include_shared = payload.pop("include_shared", None)
+
+    if _is_self_reference(user_id) or _is_self_reference(query):
+        current_user = True
+        user_id = None
+        query = ""
+
+    if current_user or (user_id is None and not query and not workspace_id):
+        operation, response = _execute_operation(
+            catalog,
+            "GetAuthorizedUser",
+            {},
+            dry_run=options.dry_run,
+            client=client,
+        )
+        if options.dry_run:
+            operation["note"] = "Live run resolves the authorized ClickUp user for the configured API token."
+            return RunResult(options.name, True, [operation])
+        return RunResult(options.name, False, [operation], {"mode": "current_user", "user": _compact_user_response(response)})
+
+    if user_id is not None and workspace_id is None:
+        workspace_id = _configured_workspace_id(client)
+
+    if user_id is not None and workspace_id is not None:
+        get_payload: dict[str, Any] = {"team_id": workspace_id, "user_id": user_id}
+        if include_shared is not None:
+            get_payload["include_shared"] = _bool(include_shared, field="include_shared")
+        operation, response = _execute_operation(
+            catalog,
+            "GetUser",
+            get_payload,
+            dry_run=options.dry_run,
+            client=client,
+        )
+        if options.dry_run:
+            operation["note"] = "Live run fetches the workspace user by id."
+            return RunResult(options.name, True, [operation])
+        return RunResult(options.name, False, [operation], {"mode": "user_id", "user": _compact_user_response(response)})
+
+    operation, response = _execute_operation(
+        catalog,
+        "GetAuthorizedTeams",
+        {},
+        dry_run=options.dry_run,
+        client=client,
+    )
+    filter_payload = {"query": query or None, "user_id": str(user_id) if user_id is not None else None, "team_id": workspace_id}
+    operation["client_filter"] = {key: value for key, value in filter_payload.items() if value is not None}
+    if options.dry_run:
+        operation["note"] = "Live run filters authorized workspace members locally because ClickUp exposes them via /v2/team."
+        return RunResult(options.name, True, [operation])
+
+    matches = _filter_workspace_users(response, query=query, user_id=user_id, team_id=workspace_id)
+    return RunResult(
+        options.name,
+        False,
+        [operation],
+        {
+            "mode": "workspace_lookup",
+            "match_count": len(matches),
+            "matches": matches,
+            "resolved": matches[0] if len(matches) == 1 else None,
+        },
+    )
+
+
+def _configure_resolve_user(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--self", "--me", "--current", dest="current_user", action="store_true", default=None)
+    parser.add_argument("--user-id")
+    parser.add_argument("--query")
+    parser.add_argument("--team-id")
+    parser.add_argument("--workspace-id")
+    parser.add_argument("--include-shared", action="store_true", default=None)
+
+
+def _is_self_reference(value: Any) -> bool:
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"me", "self", "current", "current-user", "authorized-user"}
+
+
+def _configured_workspace_id(client: ClickUpClient | None) -> str | None:
+    if client and client.config.workspace_id:
+        return client.config.workspace_id
+    return load_workspace_id()
+
+
+def _compact_user_response(response: Any) -> dict[str, Any]:
+    if isinstance(response, dict) and isinstance(response.get("user"), dict):
+        return _compact_user(response["user"])
+    if isinstance(response, dict):
+        return _compact_user(response)
+    raise ToolchainError("ClickUp returned an unexpected user response")
+
+
+def _compact_user(user: dict[str, Any]) -> dict[str, Any]:
+    compact: dict[str, Any] = {}
+    for key in ("id", "username", "email", "initials", "color", "profilePicture", "profile_picture"):
+        if key in user and user.get(key) is not None:
+            compact[key] = user.get(key)
+    if "id" in compact:
+        compact["id"] = str(compact["id"])
+    return compact
+
+
+def _filter_workspace_users(
+    response: Any,
+    *,
+    query: str,
+    user_id: Any,
+    team_id: Any,
+) -> list[dict[str, Any]]:
+    query_lower = query.lower()
+    wanted_user_id = str(user_id) if user_id is not None else None
+    wanted_team_id = str(team_id) if team_id is not None else None
+    matches_by_id: dict[str, dict[str, Any]] = {}
+
+    for team in _items(response, "teams"):
+        if not isinstance(team, dict):
+            continue
+        current_team_id = str(team.get("id")) if team.get("id") is not None else None
+        if wanted_team_id and current_team_id != wanted_team_id:
+            continue
+        workspace = _compact_named_item(team)
+        for member in _items(team, "members"):
+            user = member.get("user") if isinstance(member, dict) and isinstance(member.get("user"), dict) else member
+            if not isinstance(user, dict):
+                continue
+            compact = _compact_user(user)
+            compact_id = compact.get("id")
+            if wanted_user_id and compact_id != wanted_user_id:
+                continue
+            if query_lower and not _user_matches_query(compact, query_lower):
+                continue
+            key = str(compact_id or _json_safe_identity(compact))
+            existing = matches_by_id.setdefault(key, {**compact, "workspaces": []})
+            existing_workspaces = existing.setdefault("workspaces", [])
+            if isinstance(existing_workspaces, list):
+                existing_workspaces.append(workspace)
+    return list(matches_by_id.values())
+
+
+def _json_safe_identity(value: dict[str, Any]) -> tuple[tuple[str, str], ...]:
+    return tuple(sorted((str(key), str(item)) for key, item in value.items()))
+
+
+def _user_matches_query(user: dict[str, Any], query: str) -> bool:
+    haystack = " ".join(str(user.get(key, "")) for key in ("id", "username", "email", "initials")).lower()
+    return query in haystack
+
+
+def _run_resolve_task(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_resolve_task)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    task_id = payload.pop("task_id", None)
+    url = payload.pop("url", None)
+    custom_id = payload.pop("custom_id", None)
+    query = str(payload.pop("query", "") or "").strip()
+    workspace_id = payload.pop("workspace_id", None) or payload.pop("team_id", None)
+    list_id = payload.pop("list_id", None)
+
+    if url and task_id is None and custom_id is None:
+        task_id = _extract_task_id_from_url(str(url))
+    if custom_id is not None:
+        task_id = custom_id
+        payload["custom_task_ids"] = True
+    if "custom_task_ids" in payload:
+        payload["custom_task_ids"] = _bool(payload["custom_task_ids"], field="custom_task_ids")
+    if workspace_id and payload.get("custom_task_ids") and "team_id" not in payload:
+        payload["team_id"] = workspace_id
+    elif payload.get("custom_task_ids") and "team_id" not in payload:
+        configured_workspace_id = _configured_workspace_id(client)
+        if configured_workspace_id:
+            payload["team_id"] = configured_workspace_id
+        elif not options.dry_run:
+            raise ToolchainError("resolve-task custom ids require --team-id, --workspace-id, or CLICKUP_WORKSPACE_ID")
+
+    if task_id:
+        payload["task_id"] = task_id
+        operation, response = _execute_operation(
+            catalog,
+            "GetTask",
+            payload,
+            dry_run=options.dry_run,
+            client=client,
+        )
+        if options.dry_run:
+            operation["note"] = "Live run fetches and compacts the matching task."
+            return RunResult(options.name, True, [operation])
+        return RunResult(options.name, False, [operation], {"mode": "task_id", "task": _compact_task(response)})
+
+    if not query:
+        raise ToolchainError("resolve-task requires --task-id, --url, --custom-id, or --query")
+
+    search_payload = dict(payload)
+    operation_id = "GetTasks" if list_id else "GetFilteredTeamTasks"
+    if "include_subtasks" in search_payload:
+        search_payload["subtasks"] = search_payload.pop("include_subtasks")
+    if list_id:
+        search_payload["list_id"] = list_id
+    else:
+        workspace_id = workspace_id or _configured_workspace_id(client)
+        if not workspace_id:
+            raise ToolchainError("resolve-task --query requires --list-id, --team-id, --workspace-id, or CLICKUP_WORKSPACE_ID")
+        search_payload["team_Id"] = workspace_id
+
+    operation, response = _execute_operation(
+        catalog,
+        operation_id,
+        search_payload,
+        dry_run=options.dry_run,
+        client=client,
+    )
+    operation["client_filter"] = {"query": query.lower()}
+    if options.dry_run:
+        operation["note"] = "Live run filters returned tasks locally and resolves when exactly one task matches."
+        return RunResult(options.name, True, [operation])
+
+    matches = [_compact_task(task) for task in _items(_filter_task_response(response, query.lower()), "tasks")]
+    return RunResult(
+        options.name,
+        False,
+        [operation],
+        {
+            "mode": "search",
+            "match_count": len(matches),
+            "matches": matches,
+            "resolved": matches[0] if len(matches) == 1 else None,
+        },
+    )
+
+
+def _configure_resolve_task(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", "--id", dest="task_id", required=False)
+    parser.add_argument("--url")
+    parser.add_argument("--custom-id")
+    parser.add_argument("--query")
+    parser.add_argument("--list-id")
+    parser.add_argument("--team-id")
+    parser.add_argument("--workspace-id")
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--include-subtasks", action="store_true", default=None)
+    parser.add_argument("--include-markdown-description", action="store_true", default=None)
+    parser.add_argument("--include-closed", action="store_true", default=None)
+    parser.add_argument("--page", type=int)
+
+
+def _extract_task_id_from_url(value: str) -> str:
+    parsed = urlparse(value)
+    source = f"{parsed.path}?{parsed.query}" if parsed.scheme or parsed.netloc else value
+    for pattern in (r"/t/([^/?#]+)", r"/task/([^/?#]+)", r"(?:^|[?&])task_id=([^&#]+)"):
+        match = re.search(pattern, source)
+        if match:
+            return unquote(match.group(1))
+    cleaned = value.strip()
+    if cleaned and "/" not in cleaned and "?" not in cleaned and "#" not in cleaned:
+        return cleaned
+    raise ToolchainError("resolve-task could not find a task id in the provided URL")
+
+
+def _compact_task(task: Any) -> dict[str, Any]:
+    if not isinstance(task, dict):
+        raise ToolchainError("ClickUp returned an unexpected task response")
+    compact: dict[str, Any] = {}
+    for key in ("id", "custom_id", "name", "url", "text_content", "description", "date_updated", "due_date", "start_date"):
+        if key in task and task.get(key) is not None:
+            compact[key] = task.get(key)
+    if "id" in compact:
+        compact["id"] = str(compact["id"])
+    if isinstance(task.get("status"), dict):
+        compact["status"] = task["status"].get("status") or task["status"].get("type")
+    elif task.get("status") is not None:
+        compact["status"] = task.get("status")
+    if isinstance(task.get("list"), dict):
+        compact["list"] = _compact_named_item(task["list"])
+    assignees = task.get("assignees")
+    if isinstance(assignees, list):
+        compact["assignees"] = [_compact_user(item) for item in assignees if isinstance(item, dict)]
     return compact
 
 
