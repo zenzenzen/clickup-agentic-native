@@ -7,13 +7,116 @@ tool registry, and MCP server are implemented behind them.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
+import shutil
+import sys
+from pathlib import Path
 
 from . import __version__
 from .client import ClickUpApiError, ClickUpClient
 from .config import ConfigError, config_status, default_env_file, load_config
 from .registry import ToolOperation, load_catalog
 from .toolchains import ToolchainError, run_toolchain
+
+
+def _display_path(path: Path) -> str:
+    """Return a stable path for local setup output without exposing home internals."""
+    home = Path.home()
+    try:
+        return f"~/{path.relative_to(home)}"
+    except ValueError:
+        return str(path)
+
+
+def _repair_steps(
+    *,
+    has_key: bool,
+    has_workspace: bool,
+    status: dict[str, object],
+) -> list[dict[str, str]]:
+    env_file = default_env_file()
+    env_dir = env_file.parent
+    steps: list[dict[str, str]] = []
+
+    if sys.version_info < (3, 12):
+        steps.append(
+            {
+                "check": "python",
+                "status": "needs Python 3.12+",
+                "fix": "Install Python 3.12, then reinstall with `uv tool install . --python 3.12 --reinstall`.",
+            }
+        )
+
+    if shutil.which("uv") is None:
+        steps.append(
+            {
+                "check": "uv",
+                "status": "missing",
+                "fix": "Install uv, or use editable mode with `python3.12 -m venv .venv` and `python -m pip install -e .`.",
+            }
+        )
+
+    if shutil.which("clickup-agent") is None:
+        steps.append(
+            {
+                "check": "cli",
+                "status": "not on PATH",
+                "fix": "Run `uv tool install . --python 3.12 --reinstall`, then restart your shell if needed.",
+            }
+        )
+
+    if not env_file.exists():
+        steps.append(
+            {
+                "check": "env-file",
+                "status": "missing",
+                "fix": (
+                    f"Run `mkdir -p {_display_path(env_dir)}` and copy `.env.example` "
+                    f"to `{_display_path(env_file)}`, then run `chmod 600 {_display_path(env_file)}`."
+                ),
+            }
+        )
+
+    for warning in status.get("warnings", []):
+        steps.append(
+            {
+                "check": "env-file-permissions",
+                "status": str(warning),
+                "fix": f"Run `chmod 600 {_display_path(env_file)}`.",
+            }
+        )
+
+    if not has_key:
+        steps.append(
+            {
+                "check": "CLICKUP_API_KEY",
+                "status": "missing",
+                "fix": f"Add `CLICKUP_API_KEY=<personal_token>` to `{_display_path(env_file)}`.",
+            }
+        )
+
+    if not has_workspace:
+        steps.append(
+            {
+                "check": "CLICKUP_WORKSPACE_ID",
+                "status": "optional / missing",
+                "fix": "Add a default workspace ID when you want workspace-scoped commands and live auth checks.",
+            }
+        )
+
+    cursor_project = Path.cwd() / ".cursor" / "mcp.json"
+    cursor_global = Path.home() / ".cursor" / "mcp.json"
+    if not cursor_project.exists() and not cursor_global.exists():
+        steps.append(
+            {
+                "check": "cursor-mcp",
+                "status": "optional / not detected",
+                "fix": "Run `bash scripts/install.sh` or add a server command with `clickup-agent mcp`.",
+            }
+        )
+
+    return steps
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
@@ -33,12 +136,24 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     print(f"CLICKUP_WEBHOOK_SECRET: {'configured' if has_webhook_secret else 'optional / missing'}")
     for warning in status.get("warnings", []):
         print(f"CONFIG WARNING: {warning}")
+    if args.repair_plan:
+        _print_repair_plan(_repair_steps(has_key=has_key, has_workspace=has_workspace, status=status))
     if not has_key:
-        print(f"Create {env_file} from .env.example, then set CLICKUP_API_KEY.")
+        print(f"Create {_display_path(env_file)} from .env.example, then set CLICKUP_API_KEY.")
         return 1
     if args.live_auth:
         return _run_live_auth_check()
     return 0
+
+
+def _print_repair_plan(steps: list[dict[str, str]]) -> None:
+    print("Repair plan:")
+    if not steps:
+        print("- no repairs suggested")
+        return
+    for index, step in enumerate(steps, start=1):
+        print(f"{index}. {step['check']}: {step['status']}")
+        print(f"   fix: {step['fix']}")
 
 
 def _run_live_auth_check() -> int:
@@ -80,10 +195,88 @@ def _cmd_placeholder(name: str, next_step: str):
     return run
 
 
-def _cmd_mcp(_: argparse.Namespace) -> int:
-    """Run the MCP stdio server used by Cursor and other LLM clients."""
-    from .mcp_server import run
+def _cmd_setup(args: argparse.Namespace) -> int:
+    """Print a non-interactive first-run setup guide."""
+    env_file = default_env_file()
+    status = config_status()
+    has_key = bool(status.get("clickup_api_key_configured"))
+    has_workspace = bool(status.get("clickup_workspace_id_configured"))
+    steps = [
+        {
+            "name": "install",
+            "command": "uv tool install . --python 3.12 --reinstall",
+            "note": "Install or refresh the clickup-agent CLI from this checkout.",
+        },
+        {
+            "name": "env-file",
+            "command": f"mkdir -p {_display_path(env_file.parent)} && cp .env.example {_display_path(env_file)} && chmod 600 {_display_path(env_file)}",
+            "note": "Create the canonical local env file outside the workspace.",
+        },
+        {
+            "name": "edit-secrets",
+            "command": f"$EDITOR {_display_path(env_file)}",
+            "note": "Fill in CLICKUP_API_KEY and optional workspace/webhook values.",
+        },
+        {
+            "name": "verify",
+            "command": "clickup-agent doctor --repair-plan",
+            "note": "Check local config and print redacted repair guidance.",
+        },
+        {
+            "name": "mcp-smoke-test",
+            "command": "clickup-agent mcp --smoke-test",
+            "note": "Verify MCP tool registration without starting stdio or calling ClickUp.",
+        },
+    ]
+    payload = {
+        "version": __version__,
+        "env_file": _display_path(env_file),
+        "configured": {
+            "clickup_api_key": has_key,
+            "clickup_workspace_id": has_workspace,
+            "clickup_webhook_secret": bool(status.get("clickup_webhook_secret_configured")),
+        },
+        "steps": steps,
+    }
+    if args.format == "json":
+        _print_json(payload)
+        return 0
 
+    print(f"clickup-agent setup ({__version__})")
+    print(f"Env file: {payload['env_file']}")
+    print(f"CLICKUP_API_KEY: {'configured' if has_key else 'missing'}")
+    print(f"CLICKUP_WORKSPACE_ID: {'configured' if has_workspace else 'optional / missing'}")
+    print("Steps:")
+    for index, step in enumerate(steps, start=1):
+        print(f"{index}. {step['name']}")
+        print(f"   {step['command']}")
+        print(f"   {step['note']}")
+    return 0
+
+
+def _cmd_mcp(args: argparse.Namespace) -> int:
+    """Run the MCP stdio server used by Cursor and other LLM clients."""
+    from .mcp_server import create_server, run
+
+    if args.smoke_test:
+        async def list_tools() -> list[object]:
+            return await create_server().list_tools()
+
+        try:
+            tools = asyncio.run(list_tools())
+        except Exception as exc:
+            print(f"MCP smoke test: failed - {exc}")
+            return 2
+        names = {tool.name for tool in tools}
+        required = {"clickup_agent_status", "clickup_agent_tooling_plan"}
+        missing = sorted(required - names)
+        if missing:
+            print(f"MCP smoke test: failed - missing tools: {', '.join(missing)}")
+            return 2
+        print("MCP smoke test: ok")
+        print(f"Registered tools: {len(names)}")
+        print("ClickUp API calls: none")
+        return 0
     run()
     return 0
 
@@ -200,12 +393,26 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Call read-only ClickUp auth endpoints and report redacted authorization status.",
     )
+    doctor.add_argument(
+        "--repair-plan",
+        action="store_true",
+        help="Print redacted local repair steps for missing setup pieces.",
+    )
     doctor.set_defaults(func=_cmd_doctor)
+
+    setup = subcommands.add_parser("setup", help="Print a non-interactive first-run setup guide.")
+    setup.add_argument("--format", choices=["text", "json"], default="text", help="Output format.")
+    setup.set_defaults(func=_cmd_setup)
 
     chat = subcommands.add_parser("chat", help="Start the future interactive ClickUp agent.")
     chat.set_defaults(func=_cmd_placeholder("chat", "interactive ClickUp work sessions"))
 
     mcp = subcommands.add_parser("mcp", help="Start the future LLM/MCP tool server.")
+    mcp.add_argument(
+        "--smoke-test",
+        action="store_true",
+        help="Verify MCP tool registration without starting stdio or calling ClickUp.",
+    )
     mcp.set_defaults(func=_cmd_mcp)
 
     tools = subcommands.add_parser("tools", help="Inspect future ClickUp tools.")

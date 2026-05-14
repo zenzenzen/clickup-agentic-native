@@ -55,11 +55,26 @@ bash scripts/install.sh
 
 It backs up an existing env file, writes `$HOME/.config/clickup-agent/.env` with `0600` permissions, and prints an MCP config snippet. `CLICKUP_ENV_FILE` and `--env-file` are not used by the native agent.
 
+## Non-Interactive Setup Guide
+
+Agents and scripted checks can print the same first-run path without writing files or asking questions:
+
+```bash
+clickup-agent setup
+clickup-agent setup --format json
+```
+
+The setup guide reports only configured/missing status. It does not print token values or local secret contents.
+
 ## Health Check
 
 ```bash
 clickup-agent doctor
+clickup-agent doctor --repair-plan
 clickup-agent doctor --live-auth
+clickup-agent mcp --smoke-test
 ```
+
+`doctor --repair-plan` adds redacted repair steps for missing install, env file, permissions, optional workspace ID, and Cursor MCP wiring. `mcp --smoke-test` checks MCP tool registration without starting stdio and without calling ClickUp.
 
 The output should only say whether values are configured. It must not reveal token values.

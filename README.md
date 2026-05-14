@@ -22,10 +22,13 @@ The CLI grows around clear, memorable commands:
 
 ```bash
 clickup-agent chat
+clickup-agent setup
 clickup-agent tools list
 clickup-agent hotkeys list
 clickup-agent run <hotkey-or-toolchain>
 clickup-agent doctor
+clickup-agent doctor --repair-plan
+clickup-agent mcp --smoke-test
 ```
 
 Discovery commands are backed by a committed catalog generated from ClickUp's official V2 OpenAPI spec:
@@ -93,6 +96,13 @@ bash scripts/install.sh
 
 The installer can also add `clickup-agent` to Cursor as an MCP server. Choose project config for this repo only, or global config for every Cursor workspace.
 
+For a non-interactive guide that agents and humans can inspect before changing local files:
+
+```bash
+clickup-agent setup
+clickup-agent setup --format json
+```
+
 Install the Python package:
 
 ```bash
@@ -137,7 +147,9 @@ Check your local setup:
 
 ```bash
 clickup-agent doctor
+clickup-agent doctor --repair-plan
 clickup-agent doctor --live-auth
+clickup-agent mcp --smoke-test
 ```
 
 ## Install Agent Skill

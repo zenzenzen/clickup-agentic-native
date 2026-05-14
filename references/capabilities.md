@@ -5,9 +5,13 @@ Use this when explaining what the agent can do today versus what is planned.
 ## Implemented
 
 - `clickup-agent --version`
+- `clickup-agent setup`
+- `clickup-agent setup --format json`
 - `clickup-agent doctor`
+- `clickup-agent doctor --repair-plan`
 - `clickup-agent doctor --live-auth`
 - `clickup-agent mcp`
+- `clickup-agent mcp --smoke-test`
 - Generated ClickUp V2 OpenAPI catalog with 137 normalized operations
 - `clickup-agent tools list [--format table|json] [--tag <tag>] [--write-only]`
 - `clickup-agent hotkeys list [--format table|json]`
@@ -65,8 +69,11 @@ clickup-agent chat
 clickup-agent tools list
 clickup-agent hotkeys list
 clickup-agent run <hotkey-or-toolchain>
+clickup-agent setup
 clickup-agent doctor
+clickup-agent doctor --repair-plan
 clickup-agent mcp
+clickup-agent mcp --smoke-test
 ```
 
 `chat` remains a placeholder. The discovery commands, first `run` commands, and direct MCP wrappers execute real generated or curated toolchains. MCP write wrappers default to dry-run unless the caller explicitly sets `live` to true.
