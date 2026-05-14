@@ -99,6 +99,8 @@ def create_server() -> FastMCP:
                 "clickup-agent run list-hierarchy",
                 "clickup-agent run resolve-user",
                 "clickup-agent run resolve-task",
+                "clickup-agent run inspect-task",
+                "clickup-agent run audit-assigned",
                 "clickup-agent run create-task",
                 "clickup-agent run create-subtask",
                 "clickup-agent run set-status",
@@ -227,6 +229,64 @@ def create_server() -> FastMCP:
                 include_markdown_description=include_markdown_description,
                 include_closed=include_closed,
                 page=page,
+            ),
+            live=live,
+        )
+
+    @server.tool()
+    def clickup_agent_inspect_task(
+        task_id: str | None = None,
+        url: str | None = None,
+        custom_id: str | None = None,
+        custom_task_ids: bool | None = None,
+        team_id: str | None = None,
+        workspace_id: str | None = None,
+        include_subtasks: bool | None = None,
+        include_markdown_description: bool | None = None,
+        include_comments: bool | None = None,
+        comment_limit: int | None = None,
+        live: bool = True,
+    ) -> dict[str, Any]:
+        """Inspect a task for documentation, checklist, comment, link, and planning gaps."""
+        return _run_mcp_toolchain(
+            "inspect-task",
+            _payload_without_none(
+                task_id=task_id,
+                url=url,
+                custom_id=custom_id,
+                custom_task_ids=custom_task_ids,
+                team_id=team_id,
+                workspace_id=workspace_id,
+                include_subtasks=include_subtasks,
+                include_markdown_description=include_markdown_description,
+                include_comments=include_comments,
+                comment_limit=comment_limit,
+            ),
+            live=live,
+        )
+
+    @server.tool()
+    def clickup_agent_audit_assigned(
+        workspace_id: str | None = None,
+        team_id: str | None = None,
+        assignee: str | None = None,
+        user_id: str | None = None,
+        include_closed: bool | None = None,
+        page: int | None = None,
+        limit: int | None = None,
+        live: bool = True,
+    ) -> dict[str, Any]:
+        """Audit assigned tasks for cleanup gaps and proposed next actions."""
+        return _run_mcp_toolchain(
+            "audit-assigned",
+            _payload_without_none(
+                workspace_id=workspace_id,
+                team_id=team_id,
+                assignee=assignee,
+                user_id=user_id,
+                include_closed=include_closed,
+                page=page,
+                limit=limit,
             ),
             live=live,
         )

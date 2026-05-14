@@ -10565,6 +10565,24 @@
       "summary": "Resolve a task by URL, raw id, custom id, or search query."
     },
     {
+      "is_write": false,
+      "name": "inspect-task",
+      "operation_ids": [
+        "GetTask",
+        "GetTaskComments"
+      ],
+      "summary": "Inspect a task for documentation, checklist, comment, link, and planning gaps."
+    },
+    {
+      "is_write": false,
+      "name": "audit-assigned",
+      "operation_ids": [
+        "GetAuthorizedUser",
+        "GetFilteredTeamTasks"
+      ],
+      "summary": "Audit assigned tasks for professional cleanup gaps and proposed next actions."
+    },
+    {
       "is_write": true,
       "name": "create-task",
       "operation_ids": [

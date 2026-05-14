@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Callable
 from urllib.parse import unquote, urlparse
 
@@ -76,6 +77,8 @@ class ToolchainRunner:
             "list-hierarchy": _run_list_hierarchy,
             "resolve-user": _run_resolve_user,
             "resolve-task": _run_resolve_task,
+            "inspect-task": _run_inspect_task,
+            "audit-assigned": _run_audit_assigned,
             "create-task": _run_create_task,
             "create-subtask": _run_create_subtask,
             "set-status": _run_set_status,
@@ -765,7 +768,20 @@ def _compact_task(task: Any) -> dict[str, Any]:
     if not isinstance(task, dict):
         raise ToolchainError("ClickUp returned an unexpected task response")
     compact: dict[str, Any] = {}
-    for key in ("id", "custom_id", "name", "url", "text_content", "description", "date_updated", "due_date", "start_date"):
+    for key in (
+        "id",
+        "custom_id",
+        "name",
+        "url",
+        "text_content",
+        "description",
+        "markdown_description",
+        "date_updated",
+        "due_date",
+        "start_date",
+        "time_estimate",
+        "points",
+    ):
         if key in task and task.get(key) is not None:
             compact[key] = task.get(key)
     if "id" in compact:
@@ -779,7 +795,323 @@ def _compact_task(task: Any) -> dict[str, Any]:
     assignees = task.get("assignees")
     if isinstance(assignees, list):
         compact["assignees"] = [_compact_user(item) for item in assignees if isinstance(item, dict)]
+    tags = task.get("tags")
+    if isinstance(tags, list):
+        compact["tags"] = [_compact_tag(item) for item in tags]
     return compact
+
+
+def _compact_tag(tag: Any) -> Any:
+    if isinstance(tag, dict):
+        return tag.get("name") or tag.get("tag_fg") or tag
+    return tag
+
+
+def _run_inspect_task(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_inspect_task)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    task_id = payload.pop("task_id", None)
+    url = payload.pop("url", None)
+    custom_id = payload.pop("custom_id", None)
+    include_comments = _bool(payload.pop("include_comments"), field="include_comments") if "include_comments" in payload else False
+    comment_limit = _int(payload.pop("comment_limit"), field="comment_limit") if "comment_limit" in payload else 5
+    workspace_id = payload.pop("workspace_id", None) or payload.get("team_id")
+
+    if url and task_id is None and custom_id is None:
+        task_id = _extract_task_id_from_url(str(url))
+    if custom_id is not None:
+        task_id = custom_id
+        payload["custom_task_ids"] = True
+    if "custom_task_ids" in payload:
+        payload["custom_task_ids"] = _bool(payload["custom_task_ids"], field="custom_task_ids")
+    if workspace_id and payload.get("custom_task_ids") and "team_id" not in payload:
+        payload["team_id"] = workspace_id
+    if not task_id:
+        raise ToolchainError("inspect-task requires --task-id, --url, or --custom-id")
+
+    payload["task_id"] = task_id
+    task_operation, task_response = _execute_operation(catalog, "GetTask", payload, dry_run=options.dry_run, client=client)
+    operations = [task_operation]
+    if include_comments:
+        comment_payload = {
+            key: value
+            for key, value in payload.items()
+            if key in {"task_id", "custom_task_ids", "team_id"}
+        }
+        comments_operation, comments_response = _execute_operation(
+            catalog,
+            "GetTaskComments",
+            comment_payload,
+            dry_run=options.dry_run,
+            client=client,
+        )
+        operations.append(comments_operation)
+    else:
+        comments_response = None
+
+    if options.dry_run:
+        task_operation["note"] = "Live run compacts the task and reports documentation, checklist, planning, and link gaps."
+        if include_comments:
+            operations[-1]["note"] = "Live run summarizes recent task comments without mutating ClickUp."
+        return RunResult(options.name, True, operations)
+
+    return RunResult(
+        options.name,
+        False,
+        operations,
+        _inspect_task_response(task_response, comments_response, comment_limit=comment_limit),
+    )
+
+
+def _configure_inspect_task(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", "--id", dest="task_id", required=False)
+    parser.add_argument("--url")
+    parser.add_argument("--custom-id")
+    parser.add_argument("--team-id")
+    parser.add_argument("--workspace-id")
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--include-subtasks", action="store_true", default=None)
+    parser.add_argument("--include-markdown-description", action="store_true", default=None)
+    parser.add_argument("--include-comments", action="store_true", default=None)
+    parser.add_argument("--comment-limit", type=int)
+
+
+def _inspect_task_response(task_response: Any, comments_response: Any, *, comment_limit: int) -> dict[str, Any]:
+    task = _compact_task(task_response)
+    raw_description = _task_description_text(task_response)
+    comments = _compact_comments(comments_response, limit=comment_limit)
+    findings = _task_cleanup_findings(task_response, comments)
+    checklists = _compact_checklists(task_response)
+    subtasks = _compact_subtasks(task_response)
+    links = _extract_links(" ".join(str(value) for value in (raw_description, task.get("url", ""))))
+    return {
+        "task": task,
+        "description_sections": _markdown_sections(raw_description),
+        "checklist_summary": _checklist_summary(checklists),
+        "checklists": checklists,
+        "subtask_summary": {"count": len(subtasks)},
+        "subtasks": subtasks,
+        "comment_summary": {"count": len(comments), "returned": len(comments)},
+        "comments": comments,
+        "links": links,
+        "findings": findings,
+        "proposed_next_actions": _proposed_next_actions(findings),
+    }
+
+
+def _task_description_text(task: Any) -> str:
+    if not isinstance(task, dict):
+        return ""
+    for key in ("markdown_description", "description", "text_content"):
+        value = task.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return ""
+
+
+def _markdown_sections(text: str) -> list[str]:
+    sections: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            heading = stripped.lstrip("#").strip()
+            if heading:
+                sections.append(heading)
+    return sections
+
+
+def _compact_comments(response: Any, *, limit: int) -> list[dict[str, Any]]:
+    comments = _items(response, "comments")[: max(limit, 0)]
+    compacted: list[dict[str, Any]] = []
+    for comment in comments:
+        if not isinstance(comment, dict):
+            continue
+        item: dict[str, Any] = {}
+        for key in ("id", "comment_text", "text_content", "date", "resolved"):
+            if key in comment and comment.get(key) is not None:
+                item[key] = comment.get(key)
+        user = comment.get("user")
+        if isinstance(user, dict):
+            item["user"] = _compact_user(user)
+        compacted.append(item)
+    return compacted
+
+
+def _compact_checklists(task: Any) -> list[dict[str, Any]]:
+    if not isinstance(task, dict):
+        return []
+    checklists = task.get("checklists")
+    if not isinstance(checklists, list):
+        return []
+    compacted: list[dict[str, Any]] = []
+    for checklist in checklists:
+        if not isinstance(checklist, dict):
+            continue
+        items = checklist.get("items") if isinstance(checklist.get("items"), list) else []
+        compacted.append(
+            {
+                "id": str(checklist.get("id")) if checklist.get("id") is not None else None,
+                "name": checklist.get("name"),
+                "item_count": len(items),
+                "resolved_count": len([item for item in items if isinstance(item, dict) and item.get("resolved") is True]),
+            }
+        )
+    return compacted
+
+
+def _checklist_summary(checklists: list[dict[str, Any]]) -> dict[str, int]:
+    item_count = sum(_int(checklist.get("item_count", 0), field="item_count") for checklist in checklists)
+    resolved_count = sum(_int(checklist.get("resolved_count", 0), field="resolved_count") for checklist in checklists)
+    return {"count": len(checklists), "item_count": item_count, "resolved_count": resolved_count}
+
+
+def _compact_subtasks(task: Any) -> list[dict[str, Any]]:
+    if not isinstance(task, dict) or not isinstance(task.get("subtasks"), list):
+        return []
+    return [_compact_task(item) for item in task["subtasks"] if isinstance(item, dict)]
+
+
+def _extract_links(text: str) -> list[str]:
+    return sorted(set(re.findall(r"https?://[^\s)>\"]+", text)))
+
+
+def _task_cleanup_findings(task: Any, comments: list[dict[str, Any]] | None = None) -> list[str]:
+    if not isinstance(task, dict):
+        return ["unexpected-task-response"]
+    findings: list[str] = []
+    description = _task_description_text(task)
+    if not description.strip():
+        findings.append("missing-description")
+    else:
+        lower_description = description.lower()
+        if "acceptance" not in lower_description and "done when" not in lower_description:
+            findings.append("missing-acceptance-criteria")
+    if not task.get("due_date"):
+        findings.append("missing-due-date")
+    if _is_overdue(task.get("due_date"), task.get("status")):
+        findings.append("overdue")
+    assignees = task.get("assignees")
+    if not isinstance(assignees, list) or not assignees:
+        findings.append("missing-assignee")
+    if task.get("points") in (None, ""):
+        findings.append("missing-points")
+    if task.get("time_estimate") in (None, ""):
+        findings.append("missing-time-estimate")
+    if not _compact_checklists(task):
+        findings.append("missing-checklist")
+    if not _extract_links(" ".join(str(value) for value in (description, task.get("url", "")))):
+        findings.append("missing-external-link")
+    if comments:
+        unresolved = [comment for comment in comments if comment.get("resolved") is False]
+        if unresolved:
+            findings.append("unresolved-comments")
+    return findings
+
+
+def _is_overdue(value: Any, status: Any) -> bool:
+    if value in (None, ""):
+        return False
+    if isinstance(status, dict):
+        status_text = str(status.get("status") or status.get("type") or "").lower()
+    else:
+        status_text = str(status or "").lower()
+    if status_text in {"closed", "complete", "completed", "done"}:
+        return False
+    try:
+        due_ms = int(value)
+    except (TypeError, ValueError):
+        return False
+    return due_ms < int(datetime.now(tz=timezone.utc).timestamp() * 1000)
+
+
+def _proposed_next_actions(findings: list[str]) -> list[str]:
+    action_map = {
+        "missing-description": "Add a task description with context and expected outcome.",
+        "missing-acceptance-criteria": "Add an Acceptance Criteria section.",
+        "missing-due-date": "Set a due date or explicitly mark the task as unscheduled.",
+        "overdue": "Review the due date or move the task to an accurate status.",
+        "missing-assignee": "Assign an owner.",
+        "missing-points": "Backfill sprint points if this task belongs in sprint planning.",
+        "missing-time-estimate": "Backfill a time estimate if time planning is expected.",
+        "missing-checklist": "Add a checklist for execution or review steps.",
+        "missing-external-link": "Add a PR, branch, design, doc, or other external work link.",
+        "unresolved-comments": "Review unresolved assigned comments.",
+    }
+    return [action_map[finding] for finding in findings if finding in action_map]
+
+
+def _run_audit_assigned(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_audit_assigned)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    workspace_id = payload.pop("workspace_id", None) or payload.pop("team_id", None) or _configured_workspace_id(client)
+    assignee = payload.pop("assignee", None) or payload.pop("user_id", None)
+    include_closed = _bool(payload.pop("include_closed"), field="include_closed") if "include_closed" in payload else None
+    page = payload.pop("page", None)
+    limit = _int(payload.pop("limit"), field="limit") if "limit" in payload else 20
+    if not workspace_id:
+        raise ToolchainError("audit-assigned requires --team-id, --workspace-id, or CLICKUP_WORKSPACE_ID")
+
+    operations: list[dict[str, Any]] = []
+    if assignee is None or _is_self_reference(assignee):
+        user_operation, user_response = _execute_operation(
+            catalog,
+            "GetAuthorizedUser",
+            {},
+            dry_run=options.dry_run,
+            client=client,
+        )
+        operations.append(user_operation)
+        assignee = "<self>" if options.dry_run else _authorized_user_id(user_response)
+
+    search_payload: dict[str, Any] = {"team_Id": workspace_id, "assignees": [str(assignee)]}
+    if include_closed is not None:
+        search_payload["include_closed"] = include_closed
+    if page is not None:
+        search_payload["page"] = _int(page, field="page")
+    search_operation, search_response = _execute_operation(
+        catalog,
+        "GetFilteredTeamTasks",
+        search_payload,
+        dry_run=options.dry_run,
+        client=client,
+    )
+    operations.append(search_operation)
+
+    if options.dry_run:
+        search_operation["note"] = "Live run audits returned assigned tasks locally and returns findings plus proposed next actions."
+        return RunResult(options.name, True, operations)
+
+    tasks = [_compact_task(item) for item in _items(search_response, "tasks")[: max(limit, 0)] if isinstance(item, dict)]
+    findings = [
+        {
+            "task": task,
+            "findings": _task_cleanup_findings(raw_task),
+            "proposed_next_actions": _proposed_next_actions(_task_cleanup_findings(raw_task)),
+        }
+        for raw_task, task in zip(_items(search_response, "tasks")[: max(limit, 0)], tasks, strict=False)
+        if isinstance(raw_task, dict)
+    ]
+    return RunResult(
+        options.name,
+        False,
+        operations,
+        {
+            "assignee": str(assignee),
+            "task_count": len(tasks),
+            "tasks_with_findings": len([item for item in findings if item["findings"]]),
+            "findings": findings,
+        },
+    )
+
+
+def _configure_audit_assigned(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--team-id")
+    parser.add_argument("--workspace-id")
+    parser.add_argument("--assignee")
+    parser.add_argument("--user-id")
+    parser.add_argument("--include-closed", action="store_true", default=None)
+    parser.add_argument("--page", type=int)
+    parser.add_argument("--limit", type=int)
 
 
 def _run_create_task(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
