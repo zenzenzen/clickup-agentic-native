@@ -4,6 +4,14 @@
 
 The command name for the project is `clickup-agent`.
 
+## About
+
+ClickUp now offers an [official hosted MCP server](https://developer.clickup.com/docs/connect-an-ai-assistant-to-clickups-mcp-server) for connecting AI assistants to ClickUp. That is the right default when you want broad ClickUp coverage, OAuth-based authentication, managed infrastructure, and first-party support. The official MCP currently covers major workspace workflows including search, task management, bulk task updates, comments, tags, task relationships, hierarchy, members, chat, Docs, time tracking, and time-in-status reporting.
+
+This project exists for a different use case: local, inspectable ClickUp control for coding agents and terminal-first workflows. `clickup-agent` is a Python CLI that can be called directly, installed into an LLM client as an MCP stdio server, or used as a small set of predictable commands during development. It favors dry-run previews, explicit `--live` execution, generated OpenAPI catalog discovery, curated hotkey-style toolchains, and local configuration that stays outside the repo.
+
+In short: use ClickUp's official MCP when you want the full hosted ClickUp assistant surface. Use this project when you want a local agent primitive that is easy to audit, script, test, and shape around your own operating habits.
+
 ## Vision
 
 This project exists to make ClickUp feel like a native operational layer for my company workflow, not a separate place I have to manually visit and maintain.
