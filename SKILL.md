@@ -32,6 +32,14 @@ The canonical local secret file is `$HOME/.config/clickup-agent/.env`. That is t
 - Use `clickup-agent doctor` to report configured/missing status without revealing values.
 - Use `clickup-agent doctor --live-auth` when you need a safe read-only token/workspace authorization check.
 
+## Safety Defaults
+
+- Write-oriented `clickup-agent run` toolchains preview by default.
+- Use `--live` only when the user explicitly wants to mutate ClickUp.
+- Keep public PRs and docs high-level: describe safer defaults, config hygiene, and compact output without detailing security failure modes.
+- Prefer `clickup-agent doctor` and `clickup-agent doctor --live-auth` for redacted configuration checks.
+- Do not add tokens, local paths, env overrides, or detailed audit notes to tracked files.
+
 ## Common Workflows
 
 - **Install or repair local CLI**: read `references/setup.md`, then use `uv tool install . --python 3.12 --reinstall`.

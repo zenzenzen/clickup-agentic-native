@@ -2,19 +2,44 @@
 
 `clickup-agentic-native` is a home for building a super agentic, native way to access and use ClickUp tooling.
 
-The command name for the project will be `clickup-agent`.
-
-## Attribution
-
-This project is based on interfacing with ClickUp, the work management platform and APIs provided by ClickUp, Inc. ClickUp is a trademark of ClickUp, Inc.
-
-`clickup-agentic-native` is an independent integration project and is not affiliated with, sponsored by, or endorsed by ClickUp, Inc.
+The command name for the project is `clickup-agent`.
 
 ## Vision
 
 This project exists to make ClickUp feel like a native operational layer for my company workflow, not a separate place I have to manually visit and maintain.
 
 The goal is an agent that can understand work context, resolve ClickUp entities, compose safe toolchains, and help me create, update, search, comment on, organize, and review ClickUp work from the places where I already operate.
+
+## First-Time Onboarding
+
+If you are new to this repo, think of it as a local bridge between your LLM client and ClickUp. The repo gives you a Python CLI named `clickup-agent`; your LLM client can then call that CLI directly or run it as an MCP server.
+
+The shortest path is:
+
+```bash
+git clone https://github.com/zenzenzen/clickup-agentic-native.git
+cd clickup-agentic-native
+bash scripts/install.sh
+uv tool install . --python 3.12 --reinstall
+clickup-agent doctor
+```
+
+The installer helps create the local config file at `$HOME/.config/clickup-agent/.env`. Keep real ClickUp credentials there, outside the repo. The CLI reads that file automatically.
+
+Use `clickup-agent doctor` when you want to check local setup without exposing secrets. Use `clickup-agent doctor --live-auth` when you want to verify the token can read your ClickUp workspace.
+
+Most write workflows preview by default. Add `--live` only when you are ready to make the change in ClickUp:
+
+```bash
+clickup-agent run create-task --dry-run --list-id 456 --name "Write launch notes"
+clickup-agent run create-task --live --list-id 456 --name "Write launch notes"
+```
+
+After install, point your LLM client at:
+
+```bash
+clickup-agent mcp
+```
 
 ## Command Shape
 
@@ -206,3 +231,9 @@ No ClickUp API key should ever be committed to this repo.
 ## License
 
 This project is licensed under the Apache License, Version 2.0. Keep the `NOTICE` file with redistributions so attribution is preserved.
+
+## Attribution
+
+This project is based on interfacing with ClickUp, the work management platform and APIs provided by ClickUp, Inc. ClickUp is a trademark of ClickUp, Inc.
+
+`clickup-agentic-native` is an independent integration project and is not affiliated with, sponsored by, or endorsed by ClickUp, Inc.
