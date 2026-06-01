@@ -24,7 +24,7 @@ The CLI grows around clear, memorable commands:
 clickup-agent chat
 clickup-agent tools list
 clickup-agent hotkeys list
-clickup-agent run <hotkey-or-toolchain>
+clickup-agent run <hotkey-or-toolchain-or-generated-operation>
 clickup-agent doctor
 ```
 
@@ -33,6 +33,14 @@ Discovery commands are backed by a committed catalog generated from ClickUp's of
 ```bash
 clickup-agent tools list --tag Tasks --write-only
 clickup-agent hotkeys list --format json
+```
+
+If a curated hotkey is not available yet, agents can run any generated operation by operation ID or catalog name through the same dry-run/live safety rail:
+
+```bash
+clickup-agent run CreateChecklist --dry-run --task-id abc --name "Launch"
+clickup-agent run delete-checklist --dry-run --checklist-id chk
+clickup-agent run EditChecklistItem --dry-run --checklist-id chk --checklist-item-id item --resolved
 ```
 
 The first practical run toolchains support dry-run previews and live execution when `CLICKUP_API_KEY` is configured:
@@ -178,8 +186,9 @@ Development should move in small, easy-to-review steps.
 - ClickUp HTTP client with auth, redacted errors, and JSON response handling.
 - Registry-backed `tools list` and `hotkeys list` discovery.
 - `run` toolchains for search, hierarchy/list discovery, task creation/update, subtasks, checklists, comments, assignment, due dates, tags, and timers.
+- Generated-operation fallback for `clickup-agent run <operation>` so agents can stay inside the local CLI when a curated hotkey is missing.
 - `doctor --live-auth` for safe read-only token and workspace authorization checks.
-- Direct MCP wrappers for the first run toolchains, with write workflows defaulting to dry-run unless live execution is requested.
+- Direct MCP wrappers for the first run toolchains plus `clickup_agent_run_operation`, with write workflows defaulting to dry-run unless live execution is requested.
 - Dry-run output for every first-pass write workflow.
 
 ## Roadmap
@@ -189,7 +198,7 @@ Future implementation passes should expand:
 - A context/session layer for resolving workspace, list, task, doc, user, group, and channel references.
 - Full comments capability for task, list, view, and threaded comments.
 - Tasks, docs, users, guests, user groups, lists, attachments, webhooks, and time tracking coverage.
-- Pagination helpers, richer rate-limit handling, and broader generated-operation execution.
+- Pagination helpers, richer rate-limit handling, and higher-level workflows over generated-operation execution.
 
 ## Secret Handling
 

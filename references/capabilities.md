@@ -29,6 +29,7 @@ Use this when explaining what the agent can do today versus what is planned.
 - `clickup-agent run subtasks`
 - `clickup-agent run tags`
 - `clickup-agent run timer`
+- `clickup-agent run <generated operation name or ID>`
 - `scripts/install.sh` for env file, local install, and Cursor MCP config
 - `scripts/install-skill.sh` for Codex skill discovery
 - Cursor project/global MCP config shape
@@ -36,6 +37,7 @@ Use this when explaining what the agent can do today versus what is planned.
 - Bootstrap MCP tools:
   - `clickup_agent_status`
   - `clickup_agent_tooling_plan`
+  - `clickup_agent_run_operation`
 - Direct MCP tools:
   - `clickup_agent_search`
   - `clickup_agent_list_hierarchy`
@@ -64,16 +66,18 @@ These commands exist as stable contracts:
 clickup-agent chat
 clickup-agent tools list
 clickup-agent hotkeys list
-clickup-agent run <hotkey-or-toolchain>
+clickup-agent run <hotkey-or-toolchain-or-generated-operation>
 clickup-agent doctor
 clickup-agent mcp
 ```
 
-`chat` remains a placeholder. The discovery commands, first `run` commands, and direct MCP wrappers execute real generated or curated toolchains. MCP write wrappers default to dry-run unless the caller explicitly sets `live` to true.
+`chat` remains a placeholder. The discovery commands, first `run` commands, generated operation fallback, and direct MCP wrappers execute real generated or curated toolchains. MCP write wrappers default to dry-run unless the caller explicitly sets `live` to true.
 
 ## Generated Toolsets
 
 The committed catalog is generated from the official ClickUp V2 OpenAPI spec and grouped by tags such as Tasks, Comments, Tags, Time Tracking, Lists, Spaces, Members, Views, Webhooks, and Workspaces.
+
+Agents can call generated operations directly through `clickup-agent run <operation>` or the MCP `clickup_agent_run_operation` tool. Operation IDs such as `CreateChecklist` and catalog names such as `delete-checklist` both work. Write operations still preview by default unless `--live` or `live: true` is explicit.
 
 ## Implemented Hotkey Toolchains
 

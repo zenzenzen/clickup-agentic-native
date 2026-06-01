@@ -113,6 +113,7 @@ def create_server() -> FastMCP:
                 "clickup-agent run subtasks",
                 "clickup-agent run tags",
                 "clickup-agent run timer",
+                "clickup-agent run <generated operation name or ID>",
             ],
             "hotkeys": [
                 toolchain.to_dict()
@@ -122,6 +123,15 @@ def create_server() -> FastMCP:
         if include_samples:
             plan["sample_operations"] = [_compact_operation(operation) for operation in catalog.operations[:10]]
         return plan
+
+    @server.tool()
+    def clickup_agent_run_operation(
+        operation: str,
+        payload: dict[str, Any] | None = None,
+        live: bool = False,
+    ) -> dict[str, Any]:
+        """Run any generated ClickUp operation by operation id or tool name. Defaults to dry-run."""
+        return _run_mcp_toolchain(operation, payload or {}, live=live)
 
     @server.tool()
     def clickup_agent_search(

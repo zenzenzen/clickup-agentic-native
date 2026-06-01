@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from .client import ClickUpApiError, ClickUpClient
 from .config import ConfigError, load_workspace_id
-from .registry import ToolCatalog, load_catalog, normalize_tool_name
+from .registry import ToolCatalog, ToolOperation, load_catalog, normalize_tool_name
 from .requests import OperationInputError, OperationRequest, build_operation_request
 from .validation import (
     InputValidationError,
@@ -94,10 +94,13 @@ class ToolchainRunner:
         normalized = normalize_tool_name(name)
         options = self._parse_common(normalized, argv)
         handler = self.handlers.get(normalized)
-        if handler is None:
-            raise ToolchainError(f"Toolchain is not implemented yet: {normalized}")
+        operation = None if handler is not None else self._resolve_generated_operation(name, normalized)
+        if handler is None and operation is None:
+            raise ToolchainError(f"No implemented toolchain or generated operation found for: {normalized}")
         if any(item in {"-h", "--help"} for item in options.flag_payload.get("_argv", [])):
-            return handler(options, self.catalog, None)
+            if handler is not None:
+                return handler(options, self.catalog, None)
+            return _run_generated_operation(operation, options, self.catalog, None)
 
         client: ClickUpClient | None = None
         if not options.dry_run:
@@ -106,7 +109,9 @@ class ToolchainRunner:
             except ConfigError as exc:
                 raise ToolchainError(str(exc)) from exc
         try:
-            return handler(options, self.catalog, client)
+            if handler is not None:
+                return handler(options, self.catalog, client)
+            return _run_generated_operation(operation, options, self.catalog, client)
         finally:
             if client is not None:
                 client.close()
@@ -136,7 +141,17 @@ class ToolchainRunner:
         try:
             return self.catalog.get_toolchain(name).is_write
         except KeyError:
-            return False
+            pass
+        operation = self._resolve_generated_operation(name)
+        return bool(operation and operation.is_write)
+
+    def _resolve_generated_operation(self, *names: str) -> ToolOperation | None:
+        for name in names:
+            try:
+                return self.catalog.get_operation_by_name_or_id(name)
+            except KeyError:
+                continue
+        return None
 
 
 def run_toolchain(name: str, argv: list[str]) -> RunResult:
@@ -170,6 +185,134 @@ def _parse_tool_args(name: str, argv: list[str], configure: Callable[[argparse.A
     configure(parser)
     namespace = parser.parse_args(argv)
     return {key: value for key, value in vars(namespace).items() if value is not None}
+
+
+def _run_generated_operation(
+    operation: ToolOperation,
+    options: RunOptions,
+    catalog: ToolCatalog,
+    client: ClickUpClient | None,
+) -> RunResult:
+    flag_payload = _parse_generated_operation_args(operation, options.flag_payload["_argv"])
+    payload = merge_inputs(options.json_payload, flag_payload)
+    executed_operation, response = _execute_operation(
+        catalog,
+        operation.operation_id,
+        payload,
+        dry_run=options.dry_run,
+        client=client,
+    )
+    return RunResult(operation.name, options.dry_run, [executed_operation], response)
+
+
+def _parse_generated_operation_args(operation: ToolOperation, argv: list[str]) -> dict[str, Any]:
+    parser = _argument_parser(operation.name)
+    parser.description = operation.summary or f"Run generated ClickUp operation {operation.operation_id}."
+    field_schemas = _generated_operation_field_schemas(operation)
+    for field, schema in field_schemas.items():
+        flag = f"--{normalize_tool_name(field)}"
+        kwargs: dict[str, Any] = {"dest": _generated_arg_dest(field), "required": False}
+        if _schema_type(schema) == "boolean":
+            kwargs.update({"nargs": "?", "const": True})
+        elif _schema_type(schema) == "array":
+            kwargs["action"] = "append"
+        parser.add_argument(flag, **kwargs)
+    namespace = parser.parse_args(argv)
+    parsed: dict[str, Any] = {}
+    for field, schema in field_schemas.items():
+        dest = _generated_arg_dest(field)
+        value = getattr(namespace, dest)
+        if value is not None:
+            parsed[dest] = _coerce_generated_arg(value, schema, field=dest)
+    return parsed
+
+
+def _generated_operation_field_schemas(operation: ToolOperation) -> dict[str, dict[str, Any]]:
+    fields: dict[str, dict[str, Any]] = {}
+    normalized_flags: set[str] = set()
+
+    def add_field(field: str, schema: dict[str, Any]) -> None:
+        flag_key = normalize_tool_name(field)
+        if flag_key in normalized_flags:
+            return
+        normalized_flags.add(flag_key)
+        fields[field] = schema
+
+    for parameter in operation.parameters:
+        add_field(parameter.name, parameter.schema)
+    schema = operation.request_schema or {}
+    properties = schema.get("properties") if isinstance(schema, dict) else None
+    if isinstance(properties, dict):
+        for field, property_schema in properties.items():
+            if isinstance(property_schema, dict):
+                add_field(str(field), property_schema)
+    return fields
+
+
+def _generated_arg_dest(field: str) -> str:
+    return normalize_tool_name(field).replace("-", "_")
+
+
+def _schema_type(schema: dict[str, Any]) -> str | None:
+    raw_type = schema.get("type")
+    if isinstance(raw_type, list):
+        return next((item for item in raw_type if item != "null"), None)
+    if isinstance(raw_type, str):
+        return raw_type
+    return None
+
+
+def _coerce_generated_arg(value: Any, schema: dict[str, Any], *, field: str) -> Any:
+    schema_type = _schema_type(schema)
+    if schema_type == "boolean":
+        return _bool(value, field=field)
+    if schema_type == "integer":
+        return _int(value, field=field)
+    if schema_type == "number":
+        return _number(value, field=field)
+    if schema_type == "array":
+        return _coerce_generated_array(value, schema, field=field)
+    if schema_type == "object" and isinstance(value, str):
+        try:
+            return parse_json_object(value)
+        except InputValidationError as exc:
+            raise ToolchainError(str(exc)) from exc
+    return value
+
+
+def _coerce_generated_array(value: Any, schema: dict[str, Any], *, field: str) -> list[Any]:
+    if isinstance(value, list):
+        raw_items: list[Any] = []
+        for item in value:
+            if isinstance(item, str) and item.strip().startswith("["):
+                try:
+                    parsed = parse_json_object(f'{{"items": {item}}}')["items"]
+                except InputValidationError as exc:
+                    raise ToolchainError(str(exc)) from exc
+                if not isinstance(parsed, list):
+                    raise ToolchainError(f"{field} must be an array")
+                raw_items.extend(parsed)
+            elif isinstance(item, str) and "," in item:
+                raw_items.extend(part.strip() for part in item.split(",") if part.strip())
+            else:
+                raw_items.append(item)
+    elif isinstance(value, str) and value.strip().startswith("["):
+        try:
+            parsed = parse_json_object(f'{{"items": {value}}}')["items"]
+        except InputValidationError as exc:
+            raise ToolchainError(str(exc)) from exc
+        if not isinstance(parsed, list):
+            raise ToolchainError(f"{field} must be an array")
+        raw_items = parsed
+    elif isinstance(value, str):
+        raw_items = [part.strip() for part in value.split(",") if part.strip()]
+    else:
+        raw_items = [value]
+
+    item_schema = schema.get("items")
+    if not isinstance(item_schema, dict):
+        return raw_items
+    return [_coerce_generated_arg(item, item_schema, field=field) for item in raw_items]
 
 
 def _execute_operation(

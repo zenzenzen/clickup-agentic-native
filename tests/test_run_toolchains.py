@@ -161,6 +161,40 @@ def test_new_task_checklist_comment_hotkeys_dry_run(capsys) -> None:
             assert operation["params"]["include_subtasks"] is True
 
 
+def test_generated_operation_fallback_accepts_flags_and_defaults_writes_to_dry_run(capsys) -> None:
+    assert main(["run", "DeleteChecklist", "--checklist-id", "chk"]) == 0
+
+    delete_payload = _json_output(capsys)
+
+    assert delete_payload["toolchain"] == "delete-checklist"
+    assert delete_payload["dry_run"] is True
+    assert delete_payload["operations"][0]["operation_id"] == "DeleteChecklist"
+    assert delete_payload["operations"][0]["method"] == "DELETE"
+    assert delete_payload["operations"][0]["path"] == "/v2/checklist/chk"
+
+    assert (
+        main(
+            [
+                "run",
+                "EditChecklistItem",
+                "--dry-run",
+                "--checklist-id",
+                "chk",
+                "--checklist-item-id",
+                "it",
+                "--resolved",
+            ]
+        )
+        == 0
+    )
+
+    edit_payload = _json_output(capsys)
+
+    assert edit_payload["toolchain"] == "edit-checklist-item"
+    assert edit_payload["operations"][0]["path"] == "/v2/checklist/chk/checklist_item/it"
+    assert edit_payload["operations"][0]["json"] == {"resolved": True}
+
+
 def test_set_description_dry_runs_and_validation(capsys) -> None:
     assert main(["run", "set-description", "--dry-run", "--task-id", "abc", "--description", "Plain"]) == 0
     payload = _json_output(capsys)
@@ -286,6 +320,31 @@ def test_create_task_live_execution_uses_mocked_http() -> None:
     assert result.operations[0]["operation_id"] == "CreateTask"
     assert "json" not in result.operations[0]
     assert "headers" not in result.operations[0]
+
+
+def test_generated_operation_fallback_live_execution_uses_mocked_http() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert request.method == "POST"
+        assert request.url.path == "/api/v2/task/abc/checklist"
+        assert json.loads(request.content) == {"name": "Launch"}
+        return httpx.Response(200, json={"id": "chk"})
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    result = runner.run("CreateChecklist", ["--live", "--task-id", "abc", "--name", "Launch"])
+
+    assert len(requests) == 1
+    assert result.toolchain == "create-checklist"
+    assert result.response == {"id": "chk"}
+    assert result.operations[0]["operation_id"] == "CreateChecklist"
 
 
 def test_list_hierarchy_live_execution_returns_only_names_and_ids() -> None:
