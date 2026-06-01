@@ -127,10 +127,16 @@ class ToolCatalog:
     operations: tuple[ToolOperation, ...]
     toolchains: tuple[Toolchain, ...]
     _operations_by_id: dict[str, ToolOperation] = field(init=False, repr=False, compare=False)
+    _operations_by_key: dict[str, ToolOperation] = field(init=False, repr=False, compare=False)
     _toolchains_by_name: dict[str, Toolchain] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "_operations_by_id", {operation.operation_id: operation for operation in self.operations})
+        operation_keys: dict[str, ToolOperation] = {}
+        for operation in self.operations:
+            for key in _operation_lookup_keys(operation):
+                operation_keys.setdefault(key, operation)
+        object.__setattr__(self, "_operations_by_key", operation_keys)
         object.__setattr__(self, "_toolchains_by_name", {toolchain.name: toolchain for toolchain in self.toolchains})
 
     @classmethod
@@ -155,6 +161,15 @@ class ToolCatalog:
             return self._operations_by_id[operation_id]
         except KeyError as exc:
             raise KeyError(f"Unknown ClickUp operation: {operation_id}") from exc
+
+    def get_operation_by_name_or_id(self, value: str) -> ToolOperation:
+        """Find a generated operation by operationId, CLI name, or normalized key."""
+        key = value.strip()
+        candidates = tuple(dict.fromkeys((key, key.lower(), normalize_tool_name(key))))
+        for candidate in candidates:
+            if candidate in self._operations_by_key:
+                return self._operations_by_key[candidate]
+        raise KeyError(f"Unknown ClickUp operation: {value}")
 
     def get_toolchain(self, name: str) -> Toolchain:
         normalized = normalize_tool_name(name)
@@ -182,6 +197,17 @@ def normalize_tool_name(value: str) -> str:
     """Normalize user-facing command names to stable kebab-case ids."""
     cleaned = value.strip().lower().replace("_", "-").replace(" ", "-")
     return "-".join(part for part in cleaned.split("-") if part)
+
+
+def _operation_lookup_keys(operation: ToolOperation) -> tuple[str, ...]:
+    candidates = (
+        operation.operation_id,
+        operation.operation_id.lower(),
+        normalize_tool_name(operation.operation_id),
+        operation.name,
+        normalize_tool_name(operation.name),
+    )
+    return tuple(dict.fromkeys(candidate for candidate in candidates if candidate))
 
 
 @lru_cache(maxsize=1)

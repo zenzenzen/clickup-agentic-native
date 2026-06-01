@@ -33,6 +33,7 @@ def test_mcp_registers_direct_clickup_tools() -> None:
     assert {
         "clickup_agent_status",
         "clickup_agent_tooling_plan",
+        "clickup_agent_run_operation",
         "clickup_agent_search",
         "clickup_agent_list_hierarchy",
         "clickup_agent_create_task",
@@ -98,6 +99,20 @@ def test_mcp_write_toolchains_default_to_dry_run() -> None:
         assert result["ok"] is True
         assert result["dry_run"] is True
         assert result["operations"][0]["operation_id"] == operation_id
+
+
+def test_mcp_generated_operation_runner_uses_catalog_fallback() -> None:
+    server = create_server()
+    result = server._tool_manager._tools["clickup_agent_run_operation"].fn(
+        operation="DeleteChecklist",
+        payload={"checklist_id": "chk"},
+    )
+
+    assert result["ok"] is True
+    assert result["toolchain"] == "delete-checklist"
+    assert result["dry_run"] is True
+    assert result["operations"][0]["operation_id"] == "DeleteChecklist"
+    assert result["operations"][0]["path"] == "/v2/checklist/chk"
 
 
 def test_mcp_live_toolchain_uses_runner_client(monkeypatch) -> None:

@@ -6,4 +6,4 @@ and LLM-facing server entrypoints as the project grows.
 
 __all__ = ["__version__"]
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
