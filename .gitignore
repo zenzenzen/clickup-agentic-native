@@ -35,3 +35,11 @@ coverage/
 .coverage
 tmp/
 out/
+
+# Local planning, context, and handoff artifacts — never commit (this repo is public).
+/plans/
+/context/
+*.plan.md
+*.handoff.md
+*.context.md
+*.local.md
