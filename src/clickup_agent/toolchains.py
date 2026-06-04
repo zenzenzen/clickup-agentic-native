@@ -1,9 +1,16 @@
-"""Curated ClickUp run toolchains built on the generated operation registry."""
+"""Curated ClickUp workflows built on the generated operation registry.
+
+The generated catalog gives full API coverage, while this module owns the
+agent-friendly wrappers that make common task, status, checklist, comment, and
+timer workflows safer and less chatty.
+"""
 
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Any, Callable
 
 from .client import ClickUpApiError, ClickUpClient
@@ -27,7 +34,10 @@ class ToolchainError(RuntimeError):
 
 @dataclass(frozen=True)
 class RunOptions:
+    """Parsed run command inputs shared by generated operations and wrappers."""
+
     name: str
+    requested_name: str
     json_payload: dict[str, Any]
     flag_payload: dict[str, Any]
     dry_run: bool
@@ -40,17 +50,34 @@ class RunOptions:
 
 @dataclass(frozen=True)
 class RunResult:
+    """Stable JSON envelope returned by CLI and MCP callers."""
+
     toolchain: str
     dry_run: bool
     operations: list[dict[str, Any]]
     response: Any = None
+    source: str = "curated_wrapper"
+    requested_name: str | None = None
+    resolved_name: str | None = None
+    wrapper: dict[str, Any] | None = None
+    generated_operation: dict[str, Any] | None = None
+    notes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         data = {
             "toolchain": self.toolchain,
+            "source": self.source,
+            "requested_name": self.requested_name or self.toolchain,
+            "resolved_name": self.resolved_name or self.toolchain,
             "dry_run": self.dry_run,
             "operations": self.operations,
         }
+        if self.wrapper is not None:
+            data["wrapper"] = self.wrapper
+        if self.generated_operation is not None:
+            data["generated_operation"] = self.generated_operation
+        if self.notes:
+            data["notes"] = self.notes
         if self.response is not None:
             data["response"] = self.response
         return data
@@ -61,6 +88,8 @@ ClientFactory = Callable[[], ClickUpClient]
 
 
 class ToolchainRunner:
+    """Resolve a run request to either a curated wrapper or raw OpenAPI operation."""
+
     def __init__(
         self,
         catalog: ToolCatalog | None = None,
@@ -72,6 +101,8 @@ class ToolchainRunner:
         self.handlers: dict[str, ToolchainHandler] = {
             "search": _run_search,
             "list-hierarchy": _run_list_hierarchy,
+            "get-task": _run_get_task,
+            "task-statuses": _run_task_statuses,
             "create-task": _run_create_task,
             "create-subtask": _run_create_subtask,
             "set-status": _run_set_status,
@@ -85,38 +116,76 @@ class ToolchainRunner:
             "create-checklist": _run_create_checklist,
             "create-checklist-item": _run_create_checklist_item,
             "check-item": _run_check_item,
+            "sync-checklist": _run_sync_checklist,
             "subtasks": _run_subtasks,
             "tags": _run_tags,
             "timer": _run_timer,
         }
 
     def run(self, name: str, argv: list[str]) -> RunResult:
+        requested_name = name.strip()
+        exact_operation = self._resolve_exact_generated_operation(requested_name)
+        if exact_operation is not None:
+            options = self._parse_common(
+                exact_operation.name,
+                requested_name,
+                argv,
+                default_dry_run=exact_operation.is_write,
+            )
+            client = self._client_for(options)
+            try:
+                result = _run_generated_operation(exact_operation, options, self.catalog, client)
+                return self._annotate_generated_result(result, exact_operation, requested_name)
+            finally:
+                if client is not None:
+                    client.close()
+
         normalized = normalize_tool_name(name)
-        options = self._parse_common(normalized, argv)
         handler = self.handlers.get(normalized)
         operation = None if handler is not None else self._resolve_generated_operation(name, normalized)
         if handler is None and operation is None:
             raise ToolchainError(f"No implemented toolchain or generated operation found for: {normalized}")
+
+        default_dry_run = self._default_dry_run_for_resolved(normalized, operation)
+        options = self._parse_common(normalized, requested_name, argv, default_dry_run=default_dry_run)
         if any(item in {"-h", "--help"} for item in options.flag_payload.get("_argv", [])):
             if handler is not None:
-                return handler(options, self.catalog, None)
-            return _run_generated_operation(operation, options, self.catalog, None)
+                return self._annotate_wrapper_result(handler(options, self.catalog, None), normalized, requested_name)
+            return self._annotate_generated_result(
+                _run_generated_operation(operation, options, self.catalog, None),
+                operation,
+                requested_name,
+            )
 
-        client: ClickUpClient | None = None
-        if not options.dry_run:
-            try:
-                client = self.client_factory()
-            except ConfigError as exc:
-                raise ToolchainError(str(exc)) from exc
+        client = self._client_for(options)
         try:
             if handler is not None:
-                return handler(options, self.catalog, client)
-            return _run_generated_operation(operation, options, self.catalog, client)
+                return self._annotate_wrapper_result(handler(options, self.catalog, client), normalized, requested_name)
+            return self._annotate_generated_result(
+                _run_generated_operation(operation, options, self.catalog, client),
+                operation,
+                requested_name,
+            )
         finally:
             if client is not None:
                 client.close()
 
-    def _parse_common(self, name: str, argv: list[str]) -> RunOptions:
+    def _client_for(self, options: RunOptions) -> ClickUpClient | None:
+        if options.dry_run:
+            return None
+        try:
+            return self.client_factory()
+        except ConfigError as exc:
+            raise ToolchainError(str(exc)) from exc
+
+    def _parse_common(
+        self,
+        name: str,
+        requested_name: str,
+        argv: list[str],
+        *,
+        default_dry_run: bool,
+    ) -> RunOptions:
         parser = argparse.ArgumentParser(prog=f"clickup-agent run {name}", add_help=False)
         _add_common_run_arguments(parser)
         known, remaining = parser.parse_known_args(argv)
@@ -128,22 +197,31 @@ class ToolchainRunner:
             raise ToolchainError(str(exc)) from exc
         dry_run = bool(known.dry_run)
         if not known.live and not dry_run:
-            dry_run = self._defaults_to_dry_run(name)
+            dry_run = default_dry_run
         return RunOptions(
             name=name,
+            requested_name=requested_name,
             json_payload=json_payload,
             flag_payload={"_argv": remaining},
             dry_run=dry_run,
             live=bool(known.live),
         )
 
-    def _defaults_to_dry_run(self, name: str) -> bool:
+    def _default_dry_run_for_resolved(self, name: str, operation: ToolOperation | None) -> bool:
+        if operation is not None:
+            return operation.is_write
         try:
             return self.catalog.get_toolchain(name).is_write
         except KeyError:
-            pass
-        operation = self._resolve_generated_operation(name)
-        return bool(operation and operation.is_write)
+            return False
+
+    def _resolve_exact_generated_operation(self, name: str) -> ToolOperation | None:
+        if not name:
+            return None
+        try:
+            return self.catalog.get_operation(name)
+        except KeyError:
+            return None
 
     def _resolve_generated_operation(self, *names: str) -> ToolOperation | None:
         for name in names:
@@ -153,9 +231,56 @@ class ToolchainRunner:
                 continue
         return None
 
+    def _annotate_wrapper_result(self, result: RunResult, normalized: str, requested_name: str) -> RunResult:
+        try:
+            wrapper = self.catalog.get_toolchain(normalized)
+            wrapper_metadata = wrapper.to_dict()
+            operation_ids = wrapper.operation_ids
+        except KeyError:
+            wrapper_metadata = {"name": normalized}
+            operation_ids = ()
+        notes = [*result.notes]
+        if operation_ids:
+            joined = ", ".join(operation_ids)
+            notes.append(f"For full API fields, use generated operation {joined}.")
+        return replace(
+            result,
+            source="curated_wrapper",
+            requested_name=requested_name,
+            resolved_name=normalized,
+            wrapper=wrapper_metadata,
+            notes=notes,
+        )
+
+    def _annotate_generated_result(
+        self,
+        result: RunResult,
+        operation: ToolOperation,
+        requested_name: str,
+    ) -> RunResult:
+        return replace(
+            result,
+            source="generated_operation",
+            requested_name=requested_name,
+            resolved_name=operation.operation_id,
+            generated_operation=_compact_operation_metadata(operation),
+        )
+
 
 def run_toolchain(name: str, argv: list[str]) -> RunResult:
     return ToolchainRunner().run(name, argv)
+
+
+def _compact_operation_metadata(operation: ToolOperation) -> dict[str, Any]:
+    return {
+        "operation_id": operation.operation_id,
+        "name": operation.name,
+        "method": operation.method,
+        "path": operation.path,
+        "tags": list(operation.tags),
+        "write": operation.is_write,
+        "summary": operation.summary,
+    }
 
 
 def _argument_parser(name: str) -> argparse.ArgumentParser:
@@ -180,11 +305,35 @@ def _add_common_run_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _parse_tool_args(name: str, argv: list[str], configure: Callable[[argparse.ArgumentParser], None]) -> dict[str, Any]:
+def _parse_tool_args(
+    name: str,
+    argv: list[str],
+    configure: Callable[[argparse.ArgumentParser], None],
+    catalog: ToolCatalog | None = None,
+) -> dict[str, Any]:
     parser = _argument_parser(name)
     configure(parser)
-    namespace = parser.parse_args(argv)
+    note = _full_api_fields_note(catalog or load_catalog(), name)
+    if note:
+        parser.epilog = note
+    namespace, unknown = parser.parse_known_args(argv)
+    if unknown:
+        message = f"Unknown argument(s) for {name}: {' '.join(unknown)}"
+        if note:
+            message += f". {note}"
+        raise ToolchainError(message)
     return {key: value for key, value in vars(namespace).items() if value is not None}
+
+
+def _full_api_fields_note(catalog: ToolCatalog, name: str) -> str | None:
+    try:
+        toolchain = catalog.get_toolchain(name)
+    except KeyError:
+        return None
+    if not toolchain.operation_ids:
+        return None
+    joined = ", ".join(toolchain.operation_ids)
+    return f"For full API fields, use generated operation {joined}."
 
 
 def _run_generated_operation(
@@ -349,8 +498,15 @@ def _execute_operation(
             headers=request.headers,
         )
     except ClickUpApiError as exc:
-        raise ToolchainError(str(exc)) from exc
+        raise ToolchainError(_corrective_api_error(operation.operation_id, exc)) from exc
     return request.to_live_summary(), response
+
+
+def _corrective_api_error(operation_id: str, exc: ClickUpApiError) -> str:
+    message = str(exc)
+    if exc.status_code == 404 and operation_id in {"EditChecklistItem", "DeleteChecklistItem"}:
+        message += " You may have passed a checklist id instead of a checklist item id."
+    return message
 
 
 def _date_to_epoch_millis(value: Any, *, field: str) -> int:
@@ -633,6 +789,245 @@ def _compact_named_item(item: dict[str, Any]) -> dict[str, Any]:
     return compact
 
 
+def _run_get_task(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    """Fetch a task for compact agent context; raw `GetTask` remains available."""
+
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_get_task)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["task_id"], context="get-task")
+    fields = _field_list(payload.pop("fields", None))
+    summary = _bool(payload.pop("summary"), field="summary") if "summary" in payload else True
+    operation, response = _execute_operation(catalog, "GetTask", payload, dry_run=options.dry_run, client=client)
+    if options.dry_run:
+        operation["note"] = "Live wrapper returns a compact task projection. Use generated operation GetTask for raw response."
+        if fields:
+            operation["response_fields"] = fields
+        return RunResult(options.name, True, [operation])
+    if fields:
+        return RunResult(options.name, False, [operation], _project_task_response(response, fields))
+    if summary:
+        return RunResult(options.name, False, [operation], _task_summary(response))
+    return RunResult(options.name, False, [operation], response)
+
+
+def _configure_get_task(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", required=False)
+    parser.add_argument("--summary", action="store_true", default=None)
+    parser.add_argument("--fields")
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
+    parser.add_argument("--include-markdown-description", dest="include_markdown_description", action="store_true", default=None)
+
+
+def _run_task_statuses(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    """Discover valid status names before asking ClickUp to mutate a task."""
+
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_task_statuses)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    if not payload.get("task_id") and not payload.get("list_id"):
+        raise ToolchainError("task-statuses requires --task-id or --list-id")
+
+    operations: list[dict[str, Any]] = []
+    list_id = payload.pop("list_id", None)
+    if list_id is None:
+        task_payload = _task_lookup_payload(payload)
+        task_operation, task_response = _execute_operation(catalog, "GetTask", task_payload, dry_run=options.dry_run, client=client)
+        operations.append(task_operation)
+        if options.dry_run:
+            task_operation["note"] = "Live run reads task.list.id, then calls GetList to return valid statuses."
+            return RunResult(options.name, True, operations)
+        list_id = _task_list_id(task_response)
+
+    list_operation, list_response = _execute_operation(
+        catalog,
+        "GetList",
+        {"list_id": list_id},
+        dry_run=options.dry_run,
+        client=client,
+    )
+    operations.append(list_operation)
+    if options.dry_run:
+        return RunResult(options.name, True, operations)
+    return RunResult(
+        options.name,
+        False,
+        operations,
+        {"list_id": str(list_id), "statuses": _status_details(list_response)},
+    )
+
+
+def _configure_task_statuses(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id")
+    parser.add_argument("--list-id")
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
+
+
+def _field_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        values = value
+    else:
+        values = str(value).split(",")
+    return [str(item).strip() for item in values if str(item).strip()]
+
+
+def _project_task_response(response: Any, fields: list[str]) -> dict[str, Any]:
+    summary = _task_summary(response)
+    projected: dict[str, Any] = {}
+    for field_name in fields:
+        if field_name in summary:
+            projected[field_name] = summary[field_name]
+        elif isinstance(response, dict) and field_name in response:
+            projected[field_name] = response[field_name]
+        else:
+            projected[field_name] = None
+    return projected
+
+
+def _task_summary(response: Any) -> dict[str, Any]:
+    if not isinstance(response, dict):
+        return {"raw": response}
+    description = response.get("description") or response.get("text_content") or response.get("markdown_description") or response.get("markdown_content") or ""
+    return {
+        "id": response.get("id"),
+        "url": response.get("url"),
+        "name": response.get("name"),
+        "status": _task_status_name(response.get("status")),
+        "assignees": _compact_assignees(response.get("assignees")),
+        "checklist_counts": _checklist_counts(response.get("checklists")),
+        "description_length": len(str(description)),
+    }
+
+
+def _task_status_name(value: Any) -> Any:
+    if isinstance(value, dict):
+        return value.get("status") or value.get("name") or value.get("type")
+    return value
+
+
+def _compact_assignees(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    compact: list[dict[str, Any]] = []
+    for assignee in value:
+        if isinstance(assignee, dict):
+            item = {"id": assignee.get("id")}
+            for key in ("username", "initials"):
+                if assignee.get(key) is not None:
+                    item[key] = assignee.get(key)
+            compact.append(item)
+        else:
+            compact.append({"id": assignee})
+    return compact
+
+
+def _checklist_counts(value: Any) -> dict[str, int]:
+    if not isinstance(value, list):
+        return {"total": 0, "resolved": 0, "unresolved": 0}
+    items = 0
+    resolved = 0
+    for checklist in value:
+        if not isinstance(checklist, dict):
+            continue
+        checklist_items = _checklist_items(checklist)
+        items += len(checklist_items)
+        resolved += sum(1 for item in checklist_items if isinstance(item, dict) and bool(item.get("resolved")))
+    return {
+        "total": items,
+        "resolved": resolved,
+        "unresolved": items - resolved,
+    }
+
+
+def _validate_status_for_task(
+    catalog: ToolCatalog,
+    payload: dict[str, Any],
+    requested_status: Any,
+    dry_run: bool,
+    client: ClickUpClient | None,
+) -> list[dict[str, Any]]:
+    """Preflight wrapper status changes against the task's owning list."""
+
+    task_payload = _task_lookup_payload(payload)
+    if dry_run:
+        return []
+    task_operation, task_response = _execute_operation(
+        catalog,
+        "GetTask",
+        task_payload,
+        dry_run=False,
+        client=client,
+    )
+    list_id = _task_list_id(task_response)
+    list_operation, list_response = _execute_operation(
+        catalog,
+        "GetList",
+        {"list_id": list_id},
+        dry_run=False,
+        client=client,
+    )
+    valid_statuses = _status_names(list_response)
+    if not valid_statuses:
+        raise ToolchainError(f"Could not discover valid statuses for list {list_id}")
+    lookup = {status.casefold(): status for status in valid_statuses}
+    requested = str(requested_status)
+    if requested.casefold() not in lookup:
+        raise ToolchainError(
+            f"Invalid status '{requested}' for list {list_id}. Valid statuses: {', '.join(valid_statuses)}"
+        )
+    return [task_operation, list_operation]
+
+
+def _task_lookup_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in payload.items()
+        if key in {"task_id", "custom_task_ids", "team_id", "include_markdown_description"}
+    }
+
+
+def _task_list_id(response: Any) -> str:
+    if isinstance(response, dict):
+        task_list = response.get("list")
+        if isinstance(task_list, dict) and task_list.get("id") is not None:
+            return str(task_list["id"])
+        if response.get("list_id") is not None:
+            return str(response["list_id"])
+    raise ToolchainError("GetTask response did not include list.id for status discovery")
+
+
+def _status_details(response: Any) -> list[dict[str, Any]]:
+    statuses = response.get("statuses") if isinstance(response, dict) else None
+    if not isinstance(statuses, list):
+        return []
+    details: list[dict[str, Any]] = []
+    for status in statuses:
+        if isinstance(status, dict):
+            name = status.get("status") or status.get("name")
+            if name is not None:
+                details.append(
+                    {
+                        key: value
+                        for key, value in {
+                            "status": name,
+                            "type": status.get("type"),
+                            "orderindex": status.get("orderindex"),
+                            "color": status.get("color"),
+                        }.items()
+                        if value is not None
+                    }
+                )
+        elif status is not None:
+            details.append({"status": str(status)})
+    return details
+
+
+def _status_names(response: Any) -> list[str]:
+    return [str(item["status"]) for item in _status_details(response) if item.get("status") is not None]
+
+
 def _run_create_task(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
     flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_create_task)
     payload = merge_inputs(options.json_payload, flag_payload)
@@ -681,9 +1076,14 @@ def _run_set_status(options: RunOptions, catalog: ToolCatalog, client: ClickUpCl
     flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_set_status)
     payload = merge_inputs(options.json_payload, flag_payload)
     _require(payload, ["task_id", "status"], context="set-status")
-    payload["body"] = {"status": payload.pop("status")}
+    requested_status = payload.pop("status")
+    operations = _validate_status_for_task(catalog, payload, requested_status, options.dry_run, client)
+    payload["body"] = {"status": requested_status}
     operation, response = _execute_operation(catalog, "UpdateTask", payload, dry_run=options.dry_run, client=client)
-    return RunResult(options.name, options.dry_run, [operation], response)
+    if options.dry_run:
+        operation["validation_note"] = "Live run validates the requested status against the task's list statuses before UpdateTask."
+    operations.append(operation)
+    return RunResult(options.name, options.dry_run, operations, response)
 
 
 def _configure_set_status(parser: argparse.ArgumentParser) -> None:
@@ -718,9 +1118,13 @@ def _run_update_task(options: RunOptions, catalog: ToolCatalog, client: ClickUpC
     payload = merge_inputs(options.json_payload, flag_payload)
     _require(payload, ["task_id"], context="update-task")
     body: dict[str, Any] = {}
+    status: Any = None
     for key in ("name", "description", "markdown_content", "parent"):
         if key in payload:
             body[key] = payload.pop(key)
+    if "status" in payload:
+        status = payload.pop("status")
+        body["status"] = status
     for key in ("priority", "time_estimate"):
         if key in payload:
             body[key] = _int(payload.pop(key), field=key)
@@ -735,9 +1139,13 @@ def _run_update_task(options: RunOptions, catalog: ToolCatalog, client: ClickUpC
         body["start_date"] = _date_to_epoch_millis(payload.pop("start_date_iso"), field="start_date")
     if not body:
         raise ToolchainError("update-task requires at least one field to change")
+    operations = _validate_status_for_task(catalog, payload, status, options.dry_run, client) if status is not None else []
     payload["body"] = body
     operation, response = _execute_operation(catalog, "UpdateTask", payload, dry_run=options.dry_run, client=client)
-    return RunResult(options.name, options.dry_run, [operation], response)
+    if options.dry_run and status is not None:
+        operation["validation_note"] = "Live run validates the requested status against the task's list statuses before UpdateTask."
+    operations.append(operation)
+    return RunResult(options.name, options.dry_run, operations, response)
 
 
 def _configure_update_task(parser: argparse.ArgumentParser) -> None:
@@ -745,6 +1153,7 @@ def _configure_update_task(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--name")
     parser.add_argument("--description")
     parser.add_argument("--markdown-content", dest="markdown_content")
+    parser.add_argument("--status")
     parser.add_argument("--priority")
     parser.add_argument("--due-date", dest="due_date_iso")
     parser.add_argument("--due-date-time", action="store_true", default=None)
@@ -1002,17 +1411,42 @@ def _configure_edit_comment(parser: argparse.ArgumentParser) -> None:
 
 
 def _run_create_checklist(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    """Create a checklist and optional initial items in one wrapper run."""
+
     flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_create_checklist)
     payload = merge_inputs(options.json_payload, flag_payload)
     _require(payload, ["task_id", "name"], context="create-checklist")
+    raw_items = payload.pop("items", None)
+    resolved_default = _bool(payload.pop("resolved"), field="resolved") if "resolved" in payload else None
+    requested_items = _parse_checklist_items(raw_items, context="create-checklist", resolved_default=resolved_default)
     payload["body"] = {"name": payload.pop("name")}
     operation, response = _execute_operation(catalog, "CreateChecklist", payload, dry_run=options.dry_run, client=client)
-    return RunResult(options.name, options.dry_run, [operation], response)
+    operations = [operation]
+    checklist = _extract_checklist(response)
+    checklist_id = _id_from(checklist) if checklist is not None else None
+    if options.dry_run and requested_items:
+        checklist_id = "<created-checklist-id>"
+    created_items: list[dict[str, Any]] = []
+    if requested_items:
+        if checklist_id is None:
+            raise ToolchainError("CreateChecklist response did not include a checklist id for item creation")
+        item_operations, created_items = _create_checklist_items(
+            catalog,
+            checklist_id,
+            requested_items,
+            options.dry_run,
+            client,
+        )
+        operations.extend(item_operations)
+    normalized_response = None if options.dry_run else _checklist_response(response, checklist, created_items)
+    return RunResult(options.name, options.dry_run, operations, normalized_response)
 
 
 def _configure_create_checklist(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--task-id", required=False)
     parser.add_argument("--name")
+    parser.add_argument("--items")
+    parser.add_argument("--resolved", nargs="?", const="true", default=None)
     parser.add_argument("--custom-task-ids", action="store_true", default=None)
     parser.add_argument("--team-id")
 
@@ -1032,7 +1466,8 @@ def _run_create_checklist_item(options: RunOptions, catalog: ToolCatalog, client
         dry_run=options.dry_run,
         client=client,
     )
-    return RunResult(options.name, options.dry_run, [operation], response)
+    normalized_response = None if options.dry_run else _checklist_item_response(response, _extract_checklist_item(response, body.get("name")))
+    return RunResult(options.name, options.dry_run, [operation], normalized_response)
 
 
 def _configure_create_checklist_item(parser: argparse.ArgumentParser) -> None:
@@ -1059,7 +1494,8 @@ def _run_check_item(options: RunOptions, catalog: ToolCatalog, client: ClickUpCl
         raise ToolchainError("check-item requires at least one field to change")
     payload["body"] = body
     operation, response = _execute_operation(catalog, "EditChecklistItem", payload, dry_run=options.dry_run, client=client)
-    return RunResult(options.name, options.dry_run, [operation], response)
+    normalized_response = None if options.dry_run else _checklist_item_response(response, _extract_checklist_item(response, body.get("name"), payload.get("checklist_item_id")))
+    return RunResult(options.name, options.dry_run, [operation], normalized_response)
 
 
 def _configure_check_item(parser: argparse.ArgumentParser) -> None:
@@ -1071,6 +1507,340 @@ def _configure_check_item(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--name")
     parser.add_argument("--assignee")
     parser.add_argument("--parent")
+
+
+def _run_sync_checklist(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    """Non-destructively converge named checklist items by id or exact name."""
+
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_sync_checklist)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["task_id", "name", "items"], context="sync-checklist")
+    checklist_name = str(payload.pop("name"))
+    requested_items = _parse_checklist_items(
+        payload.pop("items"),
+        context="sync-checklist",
+        resolve_all=_bool(payload.pop("resolve_all"), field="resolve_all") if "resolve_all" in payload else False,
+    )
+    task_payload = _task_lookup_payload(payload)
+    operations: list[dict[str, Any]] = []
+    task_operation, task_response = _execute_operation(catalog, "GetTask", task_payload, dry_run=options.dry_run, client=client)
+    operations.append(task_operation)
+    if options.dry_run:
+        task_operation["note"] = "Live run reuses an exact-name checklist when present; otherwise it creates one."
+        checklist_id = "<existing-or-created-checklist-id>"
+        item_operations, _ = _create_checklist_items(catalog, checklist_id, requested_items, True, None)
+        operations.extend(item_operations)
+        return RunResult(options.name, True, operations)
+
+    checklist = _find_checklist_by_name(task_response, checklist_name)
+    created_checklist = None
+    if checklist is None:
+        create_payload = {**task_payload, "body": {"name": checklist_name}}
+        create_operation, create_response = _execute_operation(catalog, "CreateChecklist", create_payload, dry_run=False, client=client)
+        operations.append(create_operation)
+        checklist = _extract_checklist(create_response)
+        created_checklist = checklist
+        if checklist is None or _id_from(checklist) is None:
+            raise ToolchainError("CreateChecklist response did not include a checklist id for sync-checklist")
+
+    checklist_id = _id_from(checklist)
+    if checklist_id is None:
+        raise ToolchainError("sync-checklist could not resolve a checklist id")
+    item_operations, created_items, matched_items = _sync_checklist_items(catalog, checklist_id, checklist, requested_items, client)
+    operations.extend(item_operations)
+    response = {
+        "raw": task_response,
+        "checklist": _compact_checklist(checklist),
+        "created_checklist": _compact_checklist(created_checklist) if created_checklist else None,
+        "matched_items": matched_items,
+        "created_items": created_items,
+    }
+    return RunResult(options.name, False, operations, response)
+
+
+def _configure_sync_checklist(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", required=False)
+    parser.add_argument("--name")
+    parser.add_argument("--items")
+    parser.add_argument("--resolve-all", action="store_true", default=None)
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
+
+
+def _parse_checklist_items(
+    raw_items: Any,
+    *,
+    context: str,
+    resolved_default: bool | None = None,
+    resolve_all: bool = False,
+) -> list[dict[str, Any]]:
+    """Normalize string/object checklist item specs from JSON payloads or files."""
+
+    if raw_items is None:
+        return []
+    if isinstance(raw_items, str):
+        raw_items = _load_items_value(raw_items)
+    if not isinstance(raw_items, list):
+        raise ToolchainError(f"{context} --items must be a JSON array or a path to a JSON array file")
+
+    items: list[dict[str, Any]] = []
+    for index, item in enumerate(raw_items, start=1):
+        if isinstance(item, str):
+            normalized: dict[str, Any] = {"name": item}
+        elif isinstance(item, dict):
+            normalized = dict(item)
+        else:
+            raise ToolchainError(f"{context} item {index} must be a string or object")
+        if resolved_default is not None and "resolved" not in normalized:
+            normalized["resolved"] = resolved_default
+        if resolve_all:
+            normalized["resolved"] = True
+        if "assignee" in normalized and normalized["assignee"] is not None:
+            normalized["assignee"] = _int(normalized["assignee"], field=f"{context} item {index} assignee")
+        if "resolved" in normalized:
+            normalized["resolved"] = _bool(normalized["resolved"], field=f"{context} item {index} resolved")
+        if not normalized.get("id") and not normalized.get("name"):
+            raise ToolchainError(f"{context} item {index} requires name when id is not provided")
+        items.append(normalized)
+    return items
+
+
+def _load_items_value(value: str) -> Any:
+    path = Path(value).expanduser()
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ToolchainError(f"Invalid checklist items JSON file {value}: {exc.msg}") from exc
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise ToolchainError(f"--items must be a JSON array or existing JSON file path: {value}") from exc
+
+
+def _create_checklist_items(
+    catalog: ToolCatalog,
+    checklist_id: Any,
+    items: list[dict[str, Any]],
+    dry_run: bool,
+    client: ClickUpClient | None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    operations: list[dict[str, Any]] = []
+    created_items: list[dict[str, Any]] = []
+    for index, item in enumerate(items, start=1):
+        create_body = _checklist_item_create_body(item, context=f"item {index}")
+        create_operation, create_response = _execute_operation(
+            catalog,
+            "CreateChecklistItem",
+            {"checklist_id": checklist_id, "body": create_body},
+            dry_run=dry_run,
+            client=client,
+        )
+        operations.append(create_operation)
+        created_item = None if dry_run else _extract_checklist_item(create_response, create_body.get("name"))
+        created_item_id = _id_from(created_item) if created_item is not None else None
+        if dry_run:
+            created_item_id = f"<created-item-{index}-id>"
+        if _needs_post_create_item_edit(item):
+            if created_item_id is None:
+                raise ToolchainError("CreateChecklistItem response did not include a checklist item id for follow-up edit")
+            edit_operation, edit_response = _execute_operation(
+                catalog,
+                "EditChecklistItem",
+                {
+                    "checklist_id": checklist_id,
+                    "checklist_item_id": created_item_id,
+                    "body": _checklist_item_post_create_body(item),
+                },
+                dry_run=dry_run,
+                client=client,
+            )
+            operations.append(edit_operation)
+            if not dry_run:
+                created_item = _extract_checklist_item(edit_response, item.get("name"), created_item_id) or created_item
+        if created_item is not None:
+            created_items.append(_compact_checklist_item(created_item))
+        elif dry_run:
+            created_items.append({"id": created_item_id, "name": create_body.get("name")})
+    return operations, created_items
+
+
+def _sync_checklist_items(
+    catalog: ToolCatalog,
+    checklist_id: str,
+    checklist: dict[str, Any],
+    items: list[dict[str, Any]],
+    client: ClickUpClient | None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    operations: list[dict[str, Any]] = []
+    created_items: list[dict[str, Any]] = []
+    matched_items: list[dict[str, Any]] = []
+    existing_items = [item for item in _checklist_items(checklist) if isinstance(item, dict)]
+    by_id = {str(item.get("id")): item for item in existing_items if item.get("id") is not None}
+    by_name = {str(item.get("name")): item for item in existing_items if item.get("name") is not None}
+
+    for index, item in enumerate(items, start=1):
+        matched = None
+        if item.get("id") is not None:
+            matched = by_id.get(str(item["id"]))
+        if matched is None and item.get("name") is not None:
+            matched = by_name.get(str(item["name"]))
+
+        if matched is None:
+            item_operations, new_items = _create_checklist_items(catalog, checklist_id, [item], False, client)
+            operations.extend(item_operations)
+            created_items.extend(new_items)
+            continue
+
+        matched_items.append(_compact_checklist_item(matched))
+        edit_body = _checklist_item_sync_body(item, matched)
+        if not edit_body:
+            continue
+        item_id = _id_from(matched)
+        if item_id is None:
+            raise ToolchainError(f"sync-checklist matched item {index} without an id")
+        operation, _ = _execute_operation(
+            catalog,
+            "EditChecklistItem",
+            {
+                "checklist_id": checklist_id,
+                "checklist_item_id": item_id,
+                "body": edit_body,
+            },
+            dry_run=False,
+            client=client,
+        )
+        operations.append(operation)
+    return operations, created_items, matched_items
+
+
+def _checklist_item_create_body(item: dict[str, Any], *, context: str) -> dict[str, Any]:
+    if not item.get("name"):
+        raise ToolchainError(f"{context} requires name for checklist item creation")
+    body: dict[str, Any] = {"name": item["name"]}
+    if "assignee" in item:
+        body["assignee"] = item["assignee"]
+    return body
+
+
+def _needs_post_create_item_edit(item: dict[str, Any]) -> bool:
+    return bool(item.get("resolved")) or "parent" in item
+
+
+def _checklist_item_post_create_body(item: dict[str, Any]) -> dict[str, Any]:
+    body: dict[str, Any] = {}
+    if item.get("resolved"):
+        body["resolved"] = True
+    if "parent" in item:
+        body["parent"] = item.get("parent")
+    return body
+
+
+def _checklist_item_sync_body(item: dict[str, Any], existing: dict[str, Any]) -> dict[str, Any]:
+    body: dict[str, Any] = {}
+    if "name" in item and item.get("name") != existing.get("name"):
+        body["name"] = item.get("name")
+    if "resolved" in item and bool(item.get("resolved")) != bool(existing.get("resolved")):
+        body["resolved"] = item.get("resolved")
+    if "assignee" in item:
+        body["assignee"] = item.get("assignee")
+    if "parent" in item and item.get("parent") != existing.get("parent"):
+        body["parent"] = item.get("parent")
+    return body
+
+
+def _find_checklist_by_name(response: Any, name: str) -> dict[str, Any] | None:
+    checklists = response.get("checklists") if isinstance(response, dict) else None
+    if not isinstance(checklists, list):
+        return None
+    for checklist in checklists:
+        if isinstance(checklist, dict) and checklist.get("name") == name:
+            return checklist
+    return None
+
+
+def _extract_checklist(response: Any) -> dict[str, Any] | None:
+    if not isinstance(response, dict):
+        return None
+    checklist = response.get("checklist")
+    if isinstance(checklist, dict):
+        return checklist
+    if response.get("id") is not None and ("items" in response or "checklist_items" in response or "name" in response):
+        return response
+    return None
+
+
+def _extract_checklist_item(response: Any, expected_name: Any = None, expected_id: Any = None) -> dict[str, Any] | None:
+    if not isinstance(response, dict):
+        return None
+    for key in ("checklist_item", "item"):
+        value = response.get(key)
+        if isinstance(value, dict):
+            return value
+    checklist = _extract_checklist(response)
+    if checklist is not None:
+        for item in _checklist_items(checklist):
+            if not isinstance(item, dict):
+                continue
+            if expected_id is not None and str(item.get("id")) == str(expected_id):
+                return item
+            if expected_name is not None and item.get("name") == expected_name:
+                return item
+    if response.get("id") is not None and (expected_name is None or response.get("name") == expected_name):
+        return response
+    return None
+
+
+def _checklist_items(checklist: dict[str, Any]) -> list[Any]:
+    for key in ("items", "checklist_items"):
+        value = checklist.get(key)
+        if isinstance(value, list):
+            return value
+    return []
+
+
+def _id_from(item: dict[str, Any] | None) -> str | None:
+    if isinstance(item, dict) and item.get("id") is not None:
+        return str(item["id"])
+    return None
+
+
+def _compact_checklist(checklist: dict[str, Any] | None) -> dict[str, Any] | None:
+    if checklist is None:
+        return None
+    compact = _compact_named_item(checklist)
+    compact["items"] = [_compact_checklist_item(item) for item in _checklist_items(checklist) if isinstance(item, dict)]
+    return compact
+
+
+def _compact_checklist_item(item: dict[str, Any]) -> dict[str, Any]:
+    compact = _compact_named_item(item)
+    if "resolved" in item:
+        compact["resolved"] = bool(item.get("resolved"))
+    if "assignee" in item:
+        compact["assignee"] = item.get("assignee")
+    if "parent" in item:
+        compact["parent"] = item.get("parent")
+    return compact
+
+
+def _checklist_response(
+    raw_response: Any,
+    checklist: dict[str, Any] | None,
+    created_items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    response = {"raw": raw_response, "checklist": _compact_checklist(checklist)}
+    if created_items:
+        response["created_items"] = created_items
+    return response
+
+
+def _checklist_item_response(raw_response: Any, checklist_item: dict[str, Any] | None) -> dict[str, Any]:
+    return {
+        "raw": raw_response,
+        "checklist": _compact_checklist(_extract_checklist(raw_response)),
+        "checklist_item": _compact_checklist_item(checklist_item) if checklist_item else None,
+    }
 
 
 def _run_subtasks(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:

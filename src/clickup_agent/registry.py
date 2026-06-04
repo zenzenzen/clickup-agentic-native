@@ -1,4 +1,9 @@
-"""Typed registry for generated and curated ClickUp tool metadata."""
+"""Typed registry for generated and curated ClickUp tool metadata.
+
+Generated OpenAPI operations are the full raw API surface. Curated toolchains
+are the smaller command set designed for agents and humans, often composing or
+guarding generated operations.
+"""
 
 from __future__ import annotations
 
@@ -133,6 +138,8 @@ class ToolCatalog:
     def __post_init__(self) -> None:
         object.__setattr__(self, "_operations_by_id", {operation.operation_id: operation for operation in self.operations})
         operation_keys: dict[str, ToolOperation] = {}
+        # Support forgiving lookup for generated operations while preserving
+        # exact operationId lookup for PascalCase raw API commands.
         for operation in self.operations:
             for key in _operation_lookup_keys(operation):
                 operation_keys.setdefault(key, operation)
@@ -157,6 +164,7 @@ class ToolCatalog:
         }
 
     def get_operation(self, operation_id: str) -> ToolOperation:
+        """Find a generated operation by exact OpenAPI operationId."""
         try:
             return self._operations_by_id[operation_id]
         except KeyError as exc:
@@ -200,6 +208,7 @@ def normalize_tool_name(value: str) -> str:
 
 
 def _operation_lookup_keys(operation: ToolOperation) -> tuple[str, ...]:
+    """Return aliases accepted when users ask for raw generated operations."""
     candidates = (
         operation.operation_id,
         operation.operation_id.lower(),

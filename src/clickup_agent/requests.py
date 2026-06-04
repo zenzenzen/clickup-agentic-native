@@ -1,4 +1,9 @@
-"""Build ClickUp HTTP requests from registry operations and user inputs."""
+"""Build ClickUp HTTP requests from registry operations and user inputs.
+
+This module is the catalog-to-HTTP translator: it turns generated operation
+metadata plus wrapper/CLI payloads into one concrete request, and rejects any
+leftover fields before they reach ClickUp.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +21,8 @@ class OperationInputError(ValueError):
 
 @dataclass(frozen=True)
 class OperationRequest:
+    """Concrete ClickUp request plus safe dry-run/live summaries."""
+
     operation_id: str
     method: str
     path: str
@@ -43,6 +50,7 @@ class OperationRequest:
 
 
 def _aliases(name: str) -> tuple[str, ...]:
+    """Accept OpenAPI names and CLI-friendly snake/kebab-style spellings."""
     normalized = re.sub(r"[^a-zA-Z0-9]+", "_", name).strip("_").lower()
     lowered = name.lower()
     return tuple(dict.fromkeys((name, lowered, normalized)))
@@ -63,6 +71,7 @@ def _replace_path(path: str, name: str, value: Any) -> str:
 
 
 def build_operation_request(operation: ToolOperation, payload: dict[str, Any]) -> OperationRequest:
+    """Resolve path/query/header/body inputs for a generated operation."""
     values = dict(payload)
     path = operation.path
     params: dict[str, Any] = {}
@@ -89,6 +98,8 @@ def build_operation_request(operation: ToolOperation, payload: dict[str, Any]) -
     if "{" in path or "}" in path:
         raise OperationInputError(f"Unresolved path parameters for {operation.operation_id}: {path}")
 
+    # Curated wrappers pass explicit body when they need a narrower, intentional
+    # mutation shape; raw generated operations can fall through to schema fields.
     json_body = _extract_body(operation, explicit_body, values)
     if values:
         unknown = ", ".join(sorted(values))
@@ -108,6 +119,7 @@ def _extract_body(
     explicit_body: Any,
     remaining_values: dict[str, Any],
 ) -> dict[str, Any] | None:
+    """Build the JSON body from an explicit wrapper body or schema fields."""
     if explicit_body is not None:
         if not isinstance(explicit_body, dict):
             raise OperationInputError("body must be a JSON object")

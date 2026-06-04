@@ -3,6 +3,10 @@
 The server exposes bootstrap/status tools plus the first curated ClickUp
 toolchains. Write workflows default to dry-run previews unless callers
 explicitly request live execution.
+
+The MCP functions are intentionally thin adapters over the CLI toolchain runner
+so agent clients see the same wrapper/generated-operation behavior, source
+metadata, dry-run payloads, and corrective errors as terminal users.
 """
 
 from __future__ import annotations
@@ -36,10 +40,12 @@ def _configure_environment() -> dict[str, Any]:
 
 
 def _payload_without_none(**items: Any) -> dict[str, Any]:
+    """Preserve explicit false/empty values while dropping omitted options."""
     return {key: value for key, value in items.items() if value is not None}
 
 
 def _compact_operation(operation: Any) -> dict[str, Any]:
+    """Expose enough catalog context for planning without large schemas."""
     return {
         "name": operation.name,
         "method": operation.method,
@@ -56,6 +62,7 @@ def _run_mcp_toolchain(
     *,
     live: bool = False,
 ) -> dict[str, Any]:
+    """Invoke a toolchain through the same JSON argv path used by the CLI."""
     argv: list[str] = []
     if not live:
         argv.append("--dry-run")
@@ -84,6 +91,8 @@ def create_server() -> FastMCP:
     def clickup_agent_tooling_plan(include_samples: bool = False) -> dict[str, Any]:
         """Return the generated and curated native ClickUp tool surface."""
         catalog = load_catalog()
+        # This plan is designed for LLM clients deciding whether to call a
+        # curated wrapper or the raw generated operation escape hatch.
         plan: dict[str, Any] = {
             "command": "clickup-agent",
             "catalog": {
@@ -93,10 +102,12 @@ def create_server() -> FastMCP:
                 "write_operation_count": len([operation for operation in catalog.operations if operation.is_write]),
             },
             "implemented_commands": [
-                "clickup-agent tools list",
-                "clickup-agent hotkeys list",
+                "clickup-agent tools list (generated OpenAPI operations)",
+                "clickup-agent hotkeys list (curated wrappers)",
                 "clickup-agent run search",
                 "clickup-agent run list-hierarchy",
+                "clickup-agent run get-task",
+                "clickup-agent run task-statuses",
                 "clickup-agent run create-task",
                 "clickup-agent run create-subtask",
                 "clickup-agent run set-status",
@@ -110,6 +121,7 @@ def create_server() -> FastMCP:
                 "clickup-agent run create-checklist",
                 "clickup-agent run create-checklist-item",
                 "clickup-agent run check-item",
+                "clickup-agent run sync-checklist",
                 "clickup-agent run subtasks",
                 "clickup-agent run tags",
                 "clickup-agent run timer",
@@ -175,6 +187,50 @@ def create_server() -> FastMCP:
                 space_id=space_id,
                 folder_id=folder_id,
                 archived=archived,
+            ),
+            live=live,
+        )
+
+    @server.tool()
+    def clickup_agent_get_task(
+        task_id: str,
+        summary: bool | None = None,
+        fields: list[str] | str | None = None,
+        custom_task_ids: bool | None = None,
+        team_id: str | None = None,
+        include_markdown_description: bool | None = None,
+        live: bool = True,
+    ) -> dict[str, Any]:
+        """Fetch a task, optionally returning a compact summary or selected fields."""
+        return _run_mcp_toolchain(
+            "get-task",
+            _payload_without_none(
+                task_id=task_id,
+                summary=summary,
+                fields=fields,
+                custom_task_ids=custom_task_ids,
+                team_id=team_id,
+                include_markdown_description=include_markdown_description,
+            ),
+            live=live,
+        )
+
+    @server.tool()
+    def clickup_agent_task_statuses(
+        task_id: str | None = None,
+        list_id: str | None = None,
+        custom_task_ids: bool | None = None,
+        team_id: str | None = None,
+        live: bool = True,
+    ) -> dict[str, Any]:
+        """Discover valid statuses for a task or list."""
+        return _run_mcp_toolchain(
+            "task-statuses",
+            _payload_without_none(
+                task_id=task_id,
+                list_id=list_id,
+                custom_task_ids=custom_task_ids,
+                team_id=team_id,
             ),
             live=live,
         )
@@ -279,6 +335,7 @@ def create_server() -> FastMCP:
     def clickup_agent_update_task(
         task_id: str,
         name: str | None = None,
+        status: str | None = None,
         description: str | None = None,
         markdown_content: str | None = None,
         priority: int | None = None,
@@ -300,6 +357,7 @@ def create_server() -> FastMCP:
             _payload_without_none(
                 task_id=task_id,
                 name=name,
+                status=status,
                 description=description,
                 markdown_content=markdown_content,
                 priority=priority,
@@ -431,16 +489,20 @@ def create_server() -> FastMCP:
     def clickup_agent_create_checklist(
         task_id: str,
         name: str,
+        items: list[Any] | None = None,
+        resolved: bool | None = None,
         custom_task_ids: bool | None = None,
         team_id: str | None = None,
         live: bool = False,
     ) -> dict[str, Any]:
-        """Create a checklist on a task. Defaults to dry-run unless live is true."""
+        """Create a checklist and optional items on a task. Defaults to dry-run unless live is true."""
         return _run_mcp_toolchain(
             "create-checklist",
             _payload_without_none(
                 task_id=task_id,
                 name=name,
+                items=items,
+                resolved=resolved,
                 custom_task_ids=custom_task_ids,
                 team_id=team_id,
             ),
@@ -485,6 +547,30 @@ def create_server() -> FastMCP:
                 name=name,
                 assignee=assignee,
                 parent=parent,
+            ),
+            live=live,
+        )
+
+    @server.tool()
+    def clickup_agent_sync_checklist(
+        task_id: str,
+        name: str,
+        items: list[Any],
+        resolve_all: bool | None = None,
+        custom_task_ids: bool | None = None,
+        team_id: str | None = None,
+        live: bool = False,
+    ) -> dict[str, Any]:
+        """Create or update checklist items by id or exact name. Defaults to dry-run unless live is true."""
+        return _run_mcp_toolchain(
+            "sync-checklist",
+            _payload_without_none(
+                task_id=task_id,
+                name=name,
+                items=items,
+                resolve_all=resolve_all,
+                custom_task_ids=custom_task_ids,
+                team_id=team_id,
             ),
             live=live,
         )

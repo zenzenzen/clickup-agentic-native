@@ -3,13 +3,14 @@ from __future__ import annotations
 import json
 
 import httpx
+import pytest
 
 from clickup_agent.client import ClickUpClient
 from clickup_agent.cli import main
 from clickup_agent.config import ClickUpConfig
 from clickup_agent.registry import load_catalog
 from clickup_agent.requests import OperationInputError, build_operation_request
-from clickup_agent.toolchains import ToolchainRunner
+from clickup_agent.toolchains import ToolchainError, ToolchainRunner
 from clickup_agent.validation import InputValidationError, validate_operation_body
 
 
@@ -195,6 +196,43 @@ def test_generated_operation_fallback_accepts_flags_and_defaults_writes_to_dry_r
     assert edit_payload["operations"][0]["json"] == {"resolved": True}
 
 
+def test_exact_generated_operation_id_wins_over_curated_wrapper(capsys) -> None:
+    assert main(["run", "UpdateTask", "--dry-run", "--task-id", "abc", "--status", "complete"]) == 0
+
+    payload = _json_output(capsys)
+
+    assert payload["source"] == "generated_operation"
+    assert payload["requested_name"] == "UpdateTask"
+    assert payload["resolved_name"] == "UpdateTask"
+    assert payload["generated_operation"]["operation_id"] == "UpdateTask"
+    assert payload["operations"][0]["operation_id"] == "UpdateTask"
+    assert payload["operations"][0]["json"] == {"status": "complete"}
+
+
+def test_curated_update_task_status_is_distinct_from_generated_operation(capsys) -> None:
+    assert main(["run", "update-task", "--dry-run", "--task-id", "abc", "--status", "complete"]) == 0
+
+    payload = _json_output(capsys)
+
+    assert payload["source"] == "curated_wrapper"
+    assert payload["requested_name"] == "update-task"
+    assert payload["resolved_name"] == "update-task"
+    assert payload["wrapper"]["name"] == "update-task"
+    assert "For full API fields, use generated operation UpdateTask." in payload["notes"]
+    update_operation = next(operation for operation in payload["operations"] if operation["operation_id"] == "UpdateTask")
+    assert update_operation["json"] == {"status": "complete"}
+
+
+def test_curated_wrapper_unknown_flags_suggest_generated_operation(capsys) -> None:
+    assert main(["run", "update-task", "--dry-run", "--task-id", "abc", "--content", "raw"]) == 2
+
+    captured = capsys.readouterr()
+
+    assert "Unknown argument(s) for update-task: --content raw" in captured.out
+    assert "For full API fields, use generated operation UpdateTask." in captured.out
+    assert "Traceback" not in captured.out
+
+
 def test_set_description_dry_runs_and_validation(capsys) -> None:
     assert main(["run", "set-description", "--dry-run", "--task-id", "abc", "--description", "Plain"]) == 0
     payload = _json_output(capsys)
@@ -225,6 +263,155 @@ def test_set_description_dry_runs_and_validation(capsys) -> None:
     assert "Traceback" not in captured.out
 
 
+def test_get_task_summary_and_field_projection_live_execution() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "id": "abc",
+                "url": "https://app.clickup.com/t/abc",
+                "name": "Ship it",
+                "status": {"status": "in progress"},
+                "assignees": [{"id": 42, "username": "Ada", "email": "ada@example.test"}],
+                "checklists": [
+                    {"items": [{"resolved": True}, {"resolved": False}]},
+                    {"items": [{"resolved": True}]},
+                ],
+                "description": "Plain",
+                "markdown_description": "## Markdown",
+                "extra": "omitted",
+            },
+        )
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    summary = runner.run("get-task", ["--task-id", "abc", "--summary"])
+    projected = runner.run("get-task", ["--task-id", "abc", "--fields", "id,url,name,description_length"])
+
+    assert requests[0].method == "GET"
+    assert requests[0].url.path == "/api/v2/task/abc"
+    assert summary.response == {
+        "id": "abc",
+        "url": "https://app.clickup.com/t/abc",
+        "name": "Ship it",
+        "status": "in progress",
+        "assignees": [{"id": 42, "username": "Ada"}],
+        "checklist_counts": {"total": 3, "resolved": 2, "unresolved": 1},
+        "description_length": 5,
+    }
+    assert projected.response == {
+        "id": "abc",
+        "url": "https://app.clickup.com/t/abc",
+        "name": "Ship it",
+        "description_length": 5,
+    }
+
+
+def test_task_statuses_discovers_list_statuses_from_task_or_list() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/api/v2/task/abc":
+            return httpx.Response(200, json={"id": "abc", "list": {"id": "list-1"}})
+        if request.url.path == "/api/v2/list/list-1":
+            return httpx.Response(
+                200,
+                json={
+                    "id": "list-1",
+                    "statuses": [
+                        {"status": "to do", "type": "open", "orderindex": 0},
+                        {"status": "complete", "type": "closed", "orderindex": 1},
+                    ],
+                },
+            )
+        return httpx.Response(404, request=request)
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    via_task = runner.run("task-statuses", ["--task-id", "abc"])
+    via_list = runner.run("task-statuses", ["--list-id", "list-1"])
+
+    assert [request.url.path for request in requests] == [
+        "/api/v2/task/abc",
+        "/api/v2/list/list-1",
+        "/api/v2/list/list-1",
+    ]
+    assert via_task.response == {
+        "list_id": "list-1",
+        "statuses": [
+            {"status": "to do", "type": "open", "orderindex": 0},
+            {"status": "complete", "type": "closed", "orderindex": 1},
+        ],
+    }
+    assert via_list.response == via_task.response
+
+
+def test_status_update_validates_against_list_statuses_before_mutating() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/api/v2/task/abc" and request.method == "GET":
+            return httpx.Response(200, json={"id": "abc", "list": {"id": "list-1"}})
+        if request.url.path == "/api/v2/list/list-1":
+            return httpx.Response(200, json={"statuses": [{"status": "to do"}, {"status": "complete"}]})
+        if request.url.path == "/api/v2/task/abc" and request.method == "PUT":
+            return httpx.Response(200, json={"id": "abc", "status": {"status": "complete"}})
+        return httpx.Response(404, request=request)
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    result = runner.run("set-status", ["--live", "--task-id", "abc", "--status", "complete"])
+
+    assert [request.method for request in requests] == ["GET", "GET", "PUT"]
+    assert [request.url.path for request in requests] == ["/api/v2/task/abc", "/api/v2/list/list-1", "/api/v2/task/abc"]
+    assert json.loads(requests[-1].content) == {"status": "complete"}
+    assert result.response == {"id": "abc", "status": {"status": "complete"}}
+
+
+def test_status_update_reports_valid_statuses_before_mutation() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/api/v2/task/abc":
+            return httpx.Response(200, json={"id": "abc", "list": {"id": "list-1"}})
+        if request.url.path == "/api/v2/list/list-1":
+            return httpx.Response(200, json={"statuses": [{"status": "to do"}, {"status": "complete"}]})
+        return httpx.Response(404, request=request)
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    with pytest.raises(ToolchainError, match="Valid statuses: to do, complete"):
+        runner.run("update-task", ["--live", "--task-id", "abc", "--status", "done"])
+
+    assert [request.method for request in requests] == ["GET", "GET"]
+
+
 def test_update_task_dry_run_coerces_fields_and_requires_change(capsys) -> None:
     assert (
         main(
@@ -236,6 +423,8 @@ def test_update_task_dry_run_coerces_fields_and_requires_change(capsys) -> None:
                 "abc",
                 "--name",
                 "Renamed",
+                "--status",
+                "complete",
                 "--description",
                 "Plain",
                 "--markdown-content",
@@ -260,10 +449,11 @@ def test_update_task_dry_run_coerces_fields_and_requires_change(capsys) -> None:
         == 0
     )
     payload = _json_output(capsys)
-    body = payload["operations"][0]["json"]
+    body = next(operation for operation in payload["operations"] if operation["operation_id"] == "UpdateTask")["json"]
 
     assert body == {
         "name": "Renamed",
+        "status": "complete",
         "description": "Plain",
         "markdown_content": "## Markdown",
         "priority": 2,
@@ -470,6 +660,144 @@ def test_new_hotkeys_live_execution_uses_mocked_http() -> None:
         assert json.loads(requests[0].content) == body
 
 
+def test_create_checklist_live_response_exposes_created_item_id() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={"checklist": {"id": "chk", "items": [{"id": "item-1", "name": "Verify"}]}},
+        )
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    result = runner.run("create-checklist-item", ["--live", "--checklist-id", "chk", "--name", "Verify"])
+
+    assert requests[0].method == "POST"
+    assert requests[0].url.path == "/api/v2/checklist/chk/checklist_item"
+    assert result.response["raw"]["checklist"]["id"] == "chk"
+    assert result.response["checklist_item"]["id"] == "item-1"
+
+
+def test_checklist_item_404_suggests_checklist_item_id_mixup() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, text="Checklist item not found", request=request)
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    with pytest.raises(ToolchainError, match="You may have passed a checklist id instead of a checklist item id"):
+        runner.run("check-item", ["--live", "--checklist-id", "chk", "--item-id", "chk", "--resolved"])
+
+
+def test_create_checklist_bulk_items_dry_run_from_cli(tmp_path, capsys) -> None:
+    items_file = tmp_path / "items.json"
+    items_file.write_text(
+        json.dumps(
+            [
+                "Smoke test",
+                {"name": "Verify docs", "resolved": True, "assignee": 182},
+                {"id": "item-123", "name": "Existing item", "resolved": True},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        main(
+            [
+                "run",
+                "create-checklist",
+                "--dry-run",
+                "--task-id",
+                "abc",
+                "--name",
+                "Launch",
+                "--items",
+                str(items_file),
+                "--resolved",
+            ]
+        )
+        == 0
+    )
+
+    payload = _json_output(capsys)
+    operation_ids = [operation["operation_id"] for operation in payload["operations"]]
+
+    assert payload["source"] == "curated_wrapper"
+    assert payload["dry_run"] is True
+    assert operation_ids[0] == "CreateChecklist"
+    assert "CreateChecklistItem" in operation_ids
+
+
+def test_sync_checklist_matches_existing_items_without_deleting_unspecified_items() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/api/v2/task/abc":
+            return httpx.Response(
+                200,
+                json={
+                    "id": "abc",
+                    "checklists": [
+                        {
+                            "id": "chk",
+                            "name": "Launch",
+                            "items": [
+                                {"id": "item-1", "name": "Smoke test", "resolved": False},
+                                {"id": "item-2", "name": "Keep me", "resolved": False},
+                            ],
+                        }
+                    ],
+                },
+            )
+        if request.url.path == "/api/v2/checklist/chk/checklist_item/item-1":
+            return httpx.Response(200, json={"id": "item-1", "resolved": True})
+        if request.url.path == "/api/v2/checklist/chk/checklist_item":
+            return httpx.Response(200, json={"checklist": {"id": "chk", "items": [{"id": "item-3", "name": "New"}]}})
+        return httpx.Response(404, request=request)
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    result = runner.run(
+        "sync-checklist",
+        [
+            "--live",
+            "--task-id",
+            "abc",
+            "--name",
+            "Launch",
+            "--json",
+            json.dumps({"items": [{"name": "Smoke test", "resolved": True}, {"name": "New"}]}),
+        ],
+    )
+
+    assert [request.method for request in requests] == ["GET", "PUT", "POST"]
+    assert [request.url.path for request in requests] == [
+        "/api/v2/task/abc",
+        "/api/v2/checklist/chk/checklist_item/item-1",
+        "/api/v2/checklist/chk/checklist_item",
+    ]
+    assert result.response["checklist"]["id"] == "chk"
+    assert result.response["created_items"][0]["id"] == "item-3"
+
+
 def test_assign_me_live_execution_resolves_authorized_user() -> None:
     requests: list[httpx.Request] = []
 
@@ -559,7 +887,8 @@ def test_json_payload_can_satisfy_semantic_required_fields(capsys) -> None:
     payload = _json_output(capsys)
 
     assert payload["operations"][0]["path"] == "/v2/task/abc"
-    assert payload["operations"][0]["json"] == {"status": "done"}
+    update_operation = next(operation for operation in payload["operations"] if operation["operation_id"] == "UpdateTask")
+    assert update_operation["json"] == {"status": "done"}
 
 
 def test_predictable_cli_errors_return_exit_2_without_traceback(capsys) -> None:

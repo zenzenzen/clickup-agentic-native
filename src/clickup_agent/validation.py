@@ -1,4 +1,9 @@
-"""Input parsing and JSON Schema validation for ClickUp toolchains."""
+"""Input parsing and JSON Schema validation for ClickUp toolchains.
+
+Wrappers accept convenient CLI/MCP shapes, then this module normalizes simple
+types and applies generated schema checks before a request can be dry-run or
+sent live.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +21,7 @@ class InputValidationError(ValueError):
 
 
 def parse_json_object(raw: str | None) -> dict[str, Any]:
+    """Parse the shared --json payload format used by CLI and MCP adapters."""
     if not raw:
         return {}
     try:
@@ -37,6 +43,7 @@ def merge_inputs(json_payload: dict[str, Any], flag_payload: dict[str, Any]) -> 
 
 
 def coerce_bool(value: Any, *, field: str) -> bool:
+    """Coerce common CLI string booleans while rejecting ambiguous values."""
     if isinstance(value, bool):
         return value
     if isinstance(value, int) and value in {0, 1}:
@@ -60,6 +67,7 @@ def coerce_int(value: Any, *, field: str) -> int:
 
 
 def coerce_epoch_millis_date(value: Any, *, field: str) -> int:
+    """Convert an ISO date into ClickUp's UTC midnight epoch-millis format."""
     if isinstance(value, date) and not isinstance(value, datetime):
         parsed = value
     elif isinstance(value, str):
@@ -73,6 +81,7 @@ def coerce_epoch_millis_date(value: Any, *, field: str) -> int:
 
 
 def require_keys(payload: dict[str, Any], required: list[str], *, context: str) -> None:
+    """Raise a corrective wrapper error when semantic inputs are absent."""
     missing = [key for key in required if payload.get(key) is None or payload.get(key) == ""]
     if missing:
         joined = ", ".join(missing)
@@ -85,6 +94,7 @@ def _is_open_object_schema(schema: dict[str, Any]) -> bool:
 
 
 def _reject_unknown_body_keys(operation: ToolOperation, schema: dict[str, Any], body: dict[str, Any]) -> None:
+    """Reject typos early when the generated schema declares a closed body."""
     properties = schema.get("properties")
     if not isinstance(properties, dict) or _is_open_object_schema(schema):
         return
@@ -95,6 +105,7 @@ def _reject_unknown_body_keys(operation: ToolOperation, schema: dict[str, Any], 
 
 
 def validate_operation_body(operation: ToolOperation, body: dict[str, Any] | None) -> None:
+    """Validate generated-operation bodies before dry-run or live execution."""
     schema = operation.request_schema
     if schema is None:
         return

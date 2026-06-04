@@ -1,4 +1,9 @@
-"""Small authenticated ClickUp HTTP client with redacted errors."""
+"""Small authenticated ClickUp HTTP client with redacted errors.
+
+The CLI, curated wrappers, and MCP server all cross the network through this
+module so secret handling and API error shape stay consistent for humans and
+LLM clients.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +19,8 @@ MAX_ERROR_DETAIL_CHARS = 2000
 
 @dataclass(frozen=True)
 class ClickUpApiError(RuntimeError):
+    """User-safe ClickUp failure with already-redacted response details."""
+
     status_code: int | None
     message: str
     response_body: str | None = None
@@ -48,6 +55,7 @@ class ClickUpClient:
 
     @classmethod
     def from_environment(cls) -> ClickUpClient:
+        """Build a client from the canonical user config file."""
         return cls(load_config())
 
     def close(self) -> None:
@@ -68,6 +76,7 @@ class ClickUpClient:
         json_body: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
     ) -> Any:
+        """Execute one ClickUp request and return parsed response content."""
         try:
             response = self._client.request(
                 method,
@@ -93,6 +102,7 @@ class ClickUpClient:
 
 
 def _compact_error_detail(value: str) -> str:
+    """Keep API error payloads useful without flooding CLI/MCP output."""
     if len(value) <= MAX_ERROR_DETAIL_CHARS:
         return value
     omitted = len(value) - MAX_ERROR_DETAIL_CHARS
