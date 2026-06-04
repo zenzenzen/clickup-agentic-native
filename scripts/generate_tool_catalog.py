@@ -16,6 +16,30 @@ SOURCE_URL = "https://developer.clickup.com/openapi/clickup-api-v2-reference.jso
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
 WRITE_METHODS = {"post", "put", "patch", "delete"}
 DEFAULT_OUTPUT = Path("src/clickup_agent/catalog/tool_catalog.json")
+GENERATED_OPERATION_SOURCE = "generated_operation"
+CURATED_WRAPPER_SOURCE = "curated_wrapper"
+GENERATED_OPERATION_FAMILY = "generated_openapi_operations"
+CURATED_WRAPPER_FAMILY = "curated_wrappers"
+
+COMMAND_FAMILIES = {
+    GENERATED_OPERATION_FAMILY: {
+        "source": GENERATED_OPERATION_SOURCE,
+        "label": "Generated OpenAPI operations",
+        "discovery_command": "clickup-agent tools list",
+        "description": "Raw/generated ClickUp OpenAPI operations.",
+        "run_note": (
+            "Exact OpenAPI operation IDs such as UpdateTask run the generated operation. "
+            "Catalog names are also available when no curated wrapper owns that kebab-case name."
+        ),
+    },
+    CURATED_WRAPPER_FAMILY: {
+        "source": CURATED_WRAPPER_SOURCE,
+        "label": "Curated wrapper commands",
+        "discovery_command": "clickup-agent hotkeys list",
+        "description": "Curated wrapper commands for common agent workflows.",
+        "run_note": "Kebab-case names such as update-task run curated wrappers with CLI-friendly flags.",
+    },
+}
 
 TOOLCHAINS = [
     {
@@ -44,21 +68,33 @@ TOOLCHAINS = [
     },
     {
         "name": "set-status",
-        "summary": "Update a task status.",
+        "summary": "Update a task status with wrapper status validation.",
         "operation_ids": ["UpdateTask"],
         "is_write": True,
     },
     {
+        "name": "task-statuses",
+        "summary": "Discover valid statuses for a task or list.",
+        "operation_ids": ["GetTask", "GetList"],
+        "is_write": False,
+    },
+    {
         "name": "set-description",
-        "summary": "Update a task description (plain or markdown).",
+        "summary": "Update a task description, preferring markdown_content for rich formatting.",
         "operation_ids": ["UpdateTask"],
         "is_write": True,
     },
     {
         "name": "update-task",
-        "summary": "Update arbitrary fields on a task.",
+        "summary": "Update common task fields, including status validation.",
         "operation_ids": ["UpdateTask"],
         "is_write": True,
+    },
+    {
+        "name": "get-task",
+        "summary": "Fetch a task with optional summary or field projection output.",
+        "operation_ids": ["GetTask"],
+        "is_write": False,
     },
     {
         "name": "assign",
@@ -92,8 +128,14 @@ TOOLCHAINS = [
     },
     {
         "name": "create-checklist",
-        "summary": "Create a checklist on a task.",
+        "summary": "Create a checklist on a task, optionally with initial items.",
         "operation_ids": ["CreateChecklist"],
+        "is_write": True,
+    },
+    {
+        "name": "sync-checklist",
+        "summary": "Create or update checklist items from a non-destructive item list.",
+        "operation_ids": ["GetTask", "CreateChecklist", "CreateChecklistItem", "EditChecklistItem"],
         "is_write": True,
     },
     {
@@ -127,6 +169,19 @@ TOOLCHAINS = [
         "is_write": True,
     },
 ]
+
+
+def normalize_toolchain(toolchain: dict[str, Any]) -> dict[str, Any]:
+    enriched = dict(toolchain)
+    operation_ids = [str(item) for item in enriched.get("operation_ids", ())]
+    generated_word = "operation" if len(operation_ids) == 1 else "operations"
+    generated_names = ", ".join(operation_ids)
+    enriched.setdefault("source", CURATED_WRAPPER_SOURCE)
+    enriched.setdefault("family", CURATED_WRAPPER_FAMILY)
+    enriched.setdefault("label", "Curated wrapper commands")
+    enriched.setdefault("command_family", CURATED_WRAPPER_FAMILY)
+    enriched.setdefault("generated_operation_hint", f"For full API fields, use generated {generated_word} {generated_names}.")
+    return enriched
 
 
 def load_spec(url: str, path: Path | None) -> dict[str, Any]:
@@ -271,6 +326,10 @@ def normalize_catalog(spec: dict[str, Any], source_url: str) -> dict[str, Any]:
                 {
                     "operation_id": operation_id,
                     "name": tool_name(operation_id),
+                    "source": GENERATED_OPERATION_SOURCE,
+                    "family": GENERATED_OPERATION_FAMILY,
+                    "label": "Generated OpenAPI operations",
+                    "command_family": GENERATED_OPERATION_FAMILY,
                     "summary": operation.get("summary", ""),
                     "method": method.upper(),
                     "path": path,
@@ -288,8 +347,9 @@ def normalize_catalog(spec: dict[str, Any], source_url: str) -> dict[str, Any]:
     return {
         "source": source_url,
         "source_version": str(spec.get("info", {}).get("version", "")),
+        "command_families": COMMAND_FAMILIES,
         "operations": sorted(operations, key=lambda item: (item["tags"], item["name"])),
-        "toolchains": TOOLCHAINS,
+        "toolchains": [normalize_toolchain(toolchain) for toolchain in TOOLCHAINS],
     }
 
 

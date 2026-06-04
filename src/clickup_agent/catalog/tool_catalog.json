@@ -1,7 +1,26 @@
 {
+  "command_families": {
+    "curated_wrappers": {
+      "description": "Curated wrapper commands for common agent workflows.",
+      "discovery_command": "clickup-agent hotkeys list",
+      "label": "Curated wrapper commands",
+      "run_note": "Kebab-case names such as update-task run curated wrappers with CLI-friendly flags.",
+      "source": "curated_wrapper"
+    },
+    "generated_openapi_operations": {
+      "description": "Raw/generated ClickUp OpenAPI operations.",
+      "discovery_command": "clickup-agent tools list",
+      "label": "Generated OpenAPI operations",
+      "run_note": "Exact OpenAPI operation IDs such as UpdateTask run the generated operation. Catalog names are also available when no curated wrapper owns that kebab-case name.",
+      "source": "generated_operation"
+    }
+  },
   "operations": [
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-task-attachment",
       "operation_id": "CreateTaskAttachment",
@@ -49,13 +68,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Task Attachment",
       "tags": [
         "Attachments"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "get-access-token",
       "operation_id": "GetAccessToken",
@@ -93,13 +116,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Access Token",
       "tags": [
         "Authorization"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-authorized-user",
       "operation_id": "GetAuthorizedUser",
@@ -118,13 +145,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Authorized User",
       "tags": [
         "Authorization"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-chat-view-comment",
       "operation_id": "CreateChatViewComment",
@@ -168,13 +199,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Chat View Comment",
       "tags": [
         "Comments"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-list-comment",
       "operation_id": "CreateListComment",
@@ -224,13 +259,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create List Comment",
       "tags": [
         "Comments"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-task-comment",
       "operation_id": "CreateTaskComment",
@@ -301,13 +340,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Task Comment",
       "tags": [
         "Comments"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-threaded-comment",
       "operation_id": "CreateThreadedComment",
@@ -360,13 +403,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Threaded Comment",
       "tags": [
         "Comments"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "delete-comment",
       "operation_id": "DeleteComment",
@@ -396,13 +443,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Delete Comment",
       "tags": [
         "Comments"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-chat-view-comments",
       "operation_id": "GetChatViewComments",
@@ -450,13 +501,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Chat View Comments",
       "tags": [
         "Comments"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-list-comments",
       "operation_id": "GetListComments",
@@ -505,13 +560,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get List Comments",
       "tags": [
         "Comments"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-task-comments",
       "operation_id": "GetTaskComments",
@@ -578,13 +637,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Task Comments",
       "tags": [
         "Comments"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-threaded-comments",
       "operation_id": "GetThreadedComments",
@@ -614,13 +677,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Threaded Comments",
       "tags": [
         "Comments"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "PUT",
       "name": "update-comment",
       "operation_id": "UpdateComment",
@@ -674,13 +741,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Update Comment",
       "tags": [
         "Comments"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-accessible-custom-fields",
       "operation_id": "GetAccessibleCustomFields",
@@ -719,13 +790,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get List Custom Fields",
       "tags": [
         "Custom Fields"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-folder-available-fields",
       "operation_id": "getFolderAvailableFields",
@@ -764,13 +839,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Folder Custom Fields",
       "tags": [
         "Custom Fields"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-space-available-fields",
       "operation_id": "getSpaceAvailableFields",
@@ -809,13 +888,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Space Custom Fields",
       "tags": [
         "Custom Fields"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-team-available-fields",
       "operation_id": "getTeamAvailableFields",
@@ -854,13 +937,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Workspace Custom Fields",
       "tags": [
         "Custom Fields"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "remove-custom-field-value",
       "operation_id": "RemoveCustomFieldValue",
@@ -917,13 +1004,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Remove Custom Field Value",
       "tags": [
         "Custom Fields"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "set-custom-field-value",
       "operation_id": "SetCustomFieldValue",
@@ -1255,13 +1346,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Set Custom Field Value",
       "tags": [
         "Custom Fields"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-custom-items",
       "operation_id": "GetCustomItems",
@@ -1291,13 +1386,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Custom Task Types",
       "tags": [
         "Custom Task Types"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-folder",
       "operation_id": "CreateFolder",
@@ -1338,13 +1437,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Folder",
       "tags": [
         "Folders"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-folder-from-template",
       "operation_id": "CreateFolderFromTemplate",
@@ -1526,13 +1629,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Folder from template",
       "tags": [
         "Folders"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "delete-folder",
       "operation_id": "DeleteFolder",
@@ -1562,13 +1669,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Delete Folder",
       "tags": [
         "Folders"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-folder",
       "operation_id": "GetFolder",
@@ -1598,13 +1709,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Folder",
       "tags": [
         "Folders"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-folders",
       "operation_id": "GetFolders",
@@ -1643,13 +1758,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Folders",
       "tags": [
         "Folders"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "PUT",
       "name": "update-folder",
       "operation_id": "UpdateFolder",
@@ -1690,13 +1809,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Update Folder",
       "tags": [
         "Folders"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-goal",
       "operation_id": "CreateGoal",
@@ -1762,13 +1885,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Goal",
       "tags": [
         "Goals"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-key-result",
       "operation_id": "CreateKeyResult",
@@ -1848,13 +1975,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Key Result",
       "tags": [
         "Goals"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "delete-goal",
       "operation_id": "DeleteGoal",
@@ -1892,13 +2023,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Delete Goal",
       "tags": [
         "Goals"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "delete-key-result",
       "operation_id": "DeleteKeyResult",
@@ -1927,13 +2062,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Delete Key Result",
       "tags": [
         "Goals"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "PUT",
       "name": "edit-key-result",
       "operation_id": "EditKeyResult",
@@ -1978,13 +2117,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Edit Key Result",
       "tags": [
         "Goals"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-goal",
       "operation_id": "GetGoal",
@@ -2013,13 +2156,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Goal",
       "tags": [
         "Goals"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-goals",
       "operation_id": "GetGoals",
@@ -2058,13 +2205,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Goals",
       "tags": [
         "Goals"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "PUT",
       "name": "update-goal",
       "operation_id": "UpdateGoal",
@@ -2133,13 +2284,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Update Goal",
       "tags": [
         "Goals"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "add-guest-to-folder",
       "operation_id": "AddGuestToFolder",
@@ -2199,13 +2354,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Add Guest To Folder",
       "tags": [
         "Guests"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "add-guest-to-list",
       "operation_id": "AddGuestToList",
@@ -2265,13 +2424,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Add Guest To List",
       "tags": [
         "Guests"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "add-guest-to-task",
       "operation_id": "AddGuestToTask",
@@ -2349,13 +2512,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Add Guest To Task",
       "tags": [
         "Guests"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "PUT",
       "name": "edit-guest-on-workspace",
       "operation_id": "EditGuestOnWorkspace",
@@ -2419,13 +2586,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Edit Guest On Workspace",
       "tags": [
         "Guests"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-guest",
       "operation_id": "GetGuest",
@@ -2465,13 +2636,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Guest",
       "tags": [
         "Guests"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "invite-guest-to-workspace",
       "operation_id": "InviteGuestToWorkspace",
@@ -2531,13 +2706,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Invite Guest To Workspace",
       "tags": [
         "Guests"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "remove-guest-from-folder",
       "operation_id": "RemoveGuestFromFolder",
@@ -2586,13 +2765,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Remove Guest From Folder",
       "tags": [
         "Guests"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "remove-guest-from-list",
       "operation_id": "RemoveGuestFromList",
@@ -2641,13 +2824,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Remove Guest From List",
       "tags": [
         "Guests"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "remove-guest-from-task",
       "operation_id": "RemoveGuestFromTask",
@@ -2714,13 +2901,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Remove Guest From Task",
       "tags": [
         "Guests"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "remove-guest-from-workspace",
       "operation_id": "RemoveGuestFromWorkspace",
@@ -2760,13 +2951,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Remove Guest From Workspace",
       "tags": [
         "Guests"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "add-task-to-list",
       "operation_id": "AddTaskToList",
@@ -2805,13 +3000,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Add Task To List",
       "tags": [
         "Lists"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-folder-list-from-template",
       "operation_id": "CreateFolderListFromTemplate",
@@ -2993,13 +3192,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create List From Template in Folder",
       "tags": [
         "Lists"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-folderless-list",
       "operation_id": "CreateFolderlessList",
@@ -3064,13 +3267,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Folderless List",
       "tags": [
         "Lists"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-list",
       "operation_id": "CreateList",
@@ -3135,13 +3342,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create List",
       "tags": [
         "Lists"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-space-list-from-template",
       "operation_id": "CreateSpaceListFromTemplate",
@@ -3323,13 +3534,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create List From Template in Space",
       "tags": [
         "Lists"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "delete-list",
       "operation_id": "DeleteList",
@@ -3368,13 +3583,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Delete List",
       "tags": [
         "Lists"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-folderless-lists",
       "operation_id": "GetFolderlessLists",
@@ -3413,13 +3632,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Folderless Lists",
       "tags": [
         "Lists"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-list",
       "operation_id": "GetList",
@@ -3449,13 +3672,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get List",
       "tags": [
         "Lists"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-lists",
       "operation_id": "GetLists",
@@ -3494,13 +3721,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Lists",
       "tags": [
         "Lists"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "remove-task-from-list",
       "operation_id": "RemoveTaskFromList",
@@ -3539,13 +3770,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Remove Task From List",
       "tags": [
         "Lists"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "PUT",
       "name": "update-list",
       "operation_id": "UpdateList",
@@ -3611,13 +3846,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Update List",
       "tags": [
         "Lists"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-list-members",
       "operation_id": "GetListMembers",
@@ -3647,13 +3886,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get List Members",
       "tags": [
         "Members"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-task-members",
       "operation_id": "GetTaskMembers",
@@ -3682,13 +3925,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Task Members",
       "tags": [
         "Members"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-custom-roles",
       "operation_id": "GetCustomRoles",
@@ -3727,13 +3974,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Custom Roles",
       "tags": [
         "Roles"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "shared-hierarchy",
       "operation_id": "SharedHierarchy",
@@ -3763,13 +4014,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Shared Hierarchy",
       "tags": [
         "Shared Hierarchy"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-space",
       "operation_id": "CreateSpace",
@@ -3952,13 +4207,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Space",
       "tags": [
         "Spaces"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "delete-space",
       "operation_id": "DeleteSpace",
@@ -3988,13 +4247,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Delete Space",
       "tags": [
         "Spaces"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-space",
       "operation_id": "GetSpace",
@@ -4024,13 +4287,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Space",
       "tags": [
         "Spaces"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-spaces",
       "operation_id": "GetSpaces",
@@ -4069,13 +4336,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Spaces",
       "tags": [
         "Spaces"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "PUT",
       "name": "update-space",
       "operation_id": "UpdateSpace",
@@ -4270,13 +4541,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Update Space",
       "tags": [
         "Spaces"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "add-tag-to-task",
       "operation_id": "AddTagToTask",
@@ -4342,13 +4617,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Add Tag To Task",
       "tags": [
         "Tags"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-space-tag",
       "operation_id": "CreateSpaceTag",
@@ -4406,13 +4685,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Space Tag",
       "tags": [
         "Tags"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "delete-space-tag",
       "operation_id": "DeleteSpaceTag",
@@ -4479,13 +4762,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Delete Space Tag",
       "tags": [
         "Tags"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "PUT",
       "name": "edit-space-tag",
       "operation_id": "EditSpaceTag",
@@ -4552,13 +4839,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Edit Space Tag",
       "tags": [
         "Tags"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-space-tags",
       "operation_id": "GetSpaceTags",
@@ -4597,13 +4888,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Space Tags",
       "tags": [
         "Tags"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "remove-tag-from-task",
       "operation_id": "RemoveTagFromTask",
@@ -4669,13 +4964,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Remove Tag From Task",
       "tags": [
         "Tags"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-checklist",
       "operation_id": "CreateChecklist",
@@ -4734,13 +5033,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Checklist",
       "tags": [
         "Task Checklists"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-checklist-item",
       "operation_id": "CreateChecklistItem",
@@ -4781,13 +5084,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Checklist Item",
       "tags": [
         "Task Checklists"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "delete-checklist",
       "operation_id": "DeleteChecklist",
@@ -4816,13 +5123,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Delete Checklist",
       "tags": [
         "Task Checklists"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "delete-checklist-item",
       "operation_id": "DeleteChecklistItem",
@@ -4860,13 +5171,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Delete Checklist Item",
       "tags": [
         "Task Checklists"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "PUT",
       "name": "edit-checklist",
       "operation_id": "EditChecklist",
@@ -4907,13 +5222,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Edit Checklist",
       "tags": [
         "Task Checklists"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "PUT",
       "name": "edit-checklist-item",
       "operation_id": "EditChecklistItem",
@@ -4974,13 +5293,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Edit Checklist Item",
       "tags": [
         "Task Checklists"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "add-dependency",
       "operation_id": "AddDependency",
@@ -5039,13 +5362,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Add Dependency",
       "tags": [
         "Task Relationships"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "add-task-link",
       "operation_id": "AddTaskLink",
@@ -5102,13 +5429,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Add Task Link",
       "tags": [
         "Task Relationships"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "delete-dependency",
       "operation_id": "DeleteDependency",
@@ -5174,13 +5505,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Delete Dependency",
       "tags": [
         "Task Relationships"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "delete-task-link",
       "operation_id": "DeleteTaskLink",
@@ -5237,13 +5572,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Delete Task Link",
       "tags": [
         "Task Relationships"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-task",
       "operation_id": "CreateTask",
@@ -5707,13 +6046,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Task",
       "tags": [
         "Tasks"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-task-from-template",
       "operation_id": "CreateTaskFromTemplate",
@@ -5763,13 +6106,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Task From Template",
       "tags": [
         "Tasks"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "delete-task",
       "operation_id": "DeleteTask",
@@ -5826,13 +6173,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Delete Task",
       "tags": [
         "Tasks"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-bulk-tasks-timein-status",
       "operation_id": "GetBulkTasks'TimeinStatus",
@@ -5889,13 +6240,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Bulk Tasks' Time in Status",
       "tags": [
         "Tasks"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-filtered-team-tasks",
       "operation_id": "GetFilteredTeamTasks",
@@ -6165,13 +6520,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Filtered Team Tasks",
       "tags": [
         "Tasks"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-task",
       "operation_id": "GetTask",
@@ -6249,13 +6608,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Task",
       "tags": [
         "Tasks"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-task-s-timein-status",
       "operation_id": "GetTask'sTimeinStatus",
@@ -6312,13 +6675,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Task's Time in Status",
       "tags": [
         "Tasks"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-tasks",
       "operation_id": "GetTasks",
@@ -6585,13 +6952,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Tasks",
       "tags": [
         "Tasks"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "merge-tasks",
       "operation_id": "mergeTasks",
@@ -6649,13 +7020,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Merge Tasks",
       "tags": [
         "Tasks"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "PUT",
       "name": "update-task",
       "operation_id": "UpdateTask",
@@ -6822,13 +7197,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Update Task",
       "tags": [
         "Tasks"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-folder-templates",
       "operation_id": "GetFolderTemplates",
@@ -6867,13 +7246,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Folder Templates",
       "tags": [
         "Templates"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-list-templates",
       "operation_id": "GetListTemplates",
@@ -6912,13 +7295,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get List Templates",
       "tags": [
         "Templates"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-task-templates",
       "operation_id": "GetTaskTemplates",
@@ -6967,13 +7354,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Task Templates",
       "tags": [
         "Templates"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "addtagsfromtimeentries",
       "operation_id": "Addtagsfromtimeentries",
@@ -7041,13 +7432,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Add tags from time entries",
       "tags": [
         "Time Tracking"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "PUT",
       "name": "changetagnamesfromtimeentries",
       "operation_id": "Changetagnamesfromtimeentries",
@@ -7100,13 +7495,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Change tag names from time entries",
       "tags": [
         "Time Tracking"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "createatimeentry",
       "operation_id": "Createatimeentry",
@@ -7216,13 +7615,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create a time entry",
       "tags": [
         "Time Tracking"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "deleteatime-entry",
       "operation_id": "DeleteatimeEntry",
@@ -7271,13 +7674,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Delete a time Entry",
       "tags": [
         "Time Tracking"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "getalltagsfromtimeentries",
       "operation_id": "Getalltagsfromtimeentries",
@@ -7316,13 +7723,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get all tags from time entries",
       "tags": [
         "Time Tracking"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "getrunningtimeentry",
       "operation_id": "Getrunningtimeentry",
@@ -7371,13 +7782,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get running time entry",
       "tags": [
         "Time Tracking"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "getsingulartimeentry",
       "operation_id": "Getsingulartimeentry",
@@ -7461,13 +7876,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get singular time entry",
       "tags": [
         "Time Tracking"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "gettimeentrieswithinadaterange",
       "operation_id": "Gettimeentrieswithinadaterange",
@@ -7639,13 +8058,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get time entries within a date range",
       "tags": [
         "Time Tracking"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "gettimeentryhistory",
       "operation_id": "Gettimeentryhistory",
@@ -7693,13 +8116,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get time entry history",
       "tags": [
         "Time Tracking"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "removetagsfromtimeentries",
       "operation_id": "Removetagsfromtimeentries",
@@ -7759,13 +8186,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Remove tags from time entries",
       "tags": [
         "Time Tracking"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "startatime-entry",
       "operation_id": "StartatimeEntry",
@@ -7843,13 +8274,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Start a time Entry",
       "tags": [
         "Time Tracking"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "stopatime-entry",
       "operation_id": "StopatimeEntry",
@@ -7888,13 +8323,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Stop a time Entry",
       "tags": [
         "Time Tracking"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "PUT",
       "name": "updateatime-entry",
       "operation_id": "UpdateatimeEntry",
@@ -8008,13 +8447,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Update a time Entry",
       "tags": [
         "Time Tracking"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "deletetimetracked",
       "operation_id": "Deletetimetracked",
@@ -8080,13 +8523,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Delete time tracked",
       "tags": [
         "Time Tracking (Legacy)"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "PUT",
       "name": "edittimetracked",
       "operation_id": "Edittimetracked",
@@ -8165,13 +8612,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Edit time tracked",
       "tags": [
         "Time Tracking (Legacy)"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "gettrackedtime",
       "operation_id": "Gettrackedtime",
@@ -8228,13 +8679,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get tracked time",
       "tags": [
         "Time Tracking (Legacy)"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "tracktime",
       "operation_id": "Tracktime",
@@ -8304,13 +8759,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Track time",
       "tags": [
         "Time Tracking (Legacy)"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-user-group",
       "operation_id": "CreateUserGroup",
@@ -8362,13 +8821,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Group",
       "tags": [
         "User Groups"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "delete-team",
       "operation_id": "DeleteTeam",
@@ -8397,13 +8860,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Delete Group",
       "tags": [
         "User Groups"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-teams1",
       "operation_id": "GetTeams1",
@@ -8445,13 +8912,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Groups",
       "tags": [
         "User Groups"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "PUT",
       "name": "update-team",
       "operation_id": "UpdateTeam",
@@ -8515,13 +8986,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Update Group",
       "tags": [
         "User Groups"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "PUT",
       "name": "edit-user-on-workspace",
       "operation_id": "EditUserOnWorkspace",
@@ -8581,13 +9056,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Edit User On Workspace",
       "tags": [
         "Users"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-user",
       "operation_id": "GetUser",
@@ -8636,13 +9115,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get User",
       "tags": [
         "Users"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "invite-user-to-workspace",
       "operation_id": "InviteUserToWorkspace",
@@ -8691,13 +9174,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Invite User To Workspace",
       "tags": [
         "Users"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "remove-user-from-workspace",
       "operation_id": "RemoveUserFromWorkspace",
@@ -8737,13 +9224,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Remove User From Workspace",
       "tags": [
         "Users"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-folder-view",
       "operation_id": "CreateFolderView",
@@ -8980,13 +9471,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Folder View",
       "tags": [
         "Views"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-list-view",
       "operation_id": "CreateListView",
@@ -9223,13 +9718,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create List View",
       "tags": [
         "Views"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-space-view",
       "operation_id": "CreateSpaceView",
@@ -9466,13 +9965,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Space View",
       "tags": [
         "Views"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-team-view",
       "operation_id": "CreateTeamView",
@@ -9709,13 +10212,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Workspace (Everything level) View",
       "tags": [
         "Views"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "delete-view",
       "operation_id": "DeleteView",
@@ -9744,13 +10251,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Delete View",
       "tags": [
         "Views"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-folder-views",
       "operation_id": "GetFolderViews",
@@ -9780,13 +10291,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Folder Views",
       "tags": [
         "Views"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-list-views",
       "operation_id": "GetListViews",
@@ -9816,13 +10331,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get List Views",
       "tags": [
         "Views"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-space-views",
       "operation_id": "GetSpaceViews",
@@ -9852,13 +10371,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Space Views",
       "tags": [
         "Views"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-team-views",
       "operation_id": "GetTeamViews",
@@ -9888,13 +10411,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Workspace (Everything level) Views",
       "tags": [
         "Views"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-view",
       "operation_id": "GetView",
@@ -9923,13 +10450,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get View",
       "tags": [
         "Views"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-view-tasks",
       "operation_id": "GetViewTasks",
@@ -9968,13 +10499,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get View Tasks",
       "tags": [
         "Views"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "PUT",
       "name": "update-view",
       "operation_id": "UpdateView",
@@ -10228,13 +10763,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Update View",
       "tags": [
         "Views"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "POST",
       "name": "create-webhook",
       "operation_id": "CreateWebhook",
@@ -10294,13 +10833,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Create Webhook",
       "tags": [
         "Webhooks"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "DELETE",
       "name": "delete-webhook",
       "operation_id": "DeleteWebhook",
@@ -10329,13 +10872,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Delete Webhook",
       "tags": [
         "Webhooks"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-webhooks",
       "operation_id": "GetWebhooks",
@@ -10365,13 +10912,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Webhooks",
       "tags": [
         "Webhooks"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": true,
+      "label": "Generated OpenAPI operations",
       "method": "PUT",
       "name": "update-webhook",
       "operation_id": "UpdateWebhook",
@@ -10419,13 +10970,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Update Webhook",
       "tags": [
         "Webhooks"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-authorized-teams",
       "operation_id": "GetAuthorizedTeams",
@@ -10444,13 +10999,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Authorized Workspaces",
       "tags": [
         "Workspaces"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-workspaceplan",
       "operation_id": "GetWorkspaceplan",
@@ -10479,13 +11038,17 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Workspace Plan",
       "tags": [
         "Workspaces"
       ]
     },
     {
+      "command_family": "generated_openapi_operations",
+      "family": "generated_openapi_operations",
       "is_write": false,
+      "label": "Generated OpenAPI operations",
       "method": "GET",
       "name": "get-workspaceseats",
       "operation_id": "GetWorkspaceseats",
@@ -10514,6 +11077,7 @@
           }
         }
       },
+      "source": "generated_operation",
       "summary": "Get Workspace seats",
       "tags": [
         "Workspaces"
@@ -10524,16 +11088,25 @@
   "source_version": "2.0",
   "toolchains": [
     {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operations GetFilteredTeamTasks, GetTasks.",
       "is_write": false,
+      "label": "Curated wrapper commands",
       "name": "search",
       "operation_ids": [
         "GetFilteredTeamTasks",
         "GetTasks"
       ],
+      "source": "curated_wrapper",
       "summary": "Search and filter tasks across a workspace or list."
     },
     {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operations GetAuthorizedTeams, GetSpaces, GetFolders, GetLists, GetFolderlessLists.",
       "is_write": false,
+      "label": "Curated wrapper commands",
       "name": "list-hierarchy",
       "operation_ids": [
         "GetAuthorizedTeams",
@@ -10542,139 +11115,263 @@
         "GetLists",
         "GetFolderlessLists"
       ],
+      "source": "curated_wrapper",
       "summary": "List workspace, space, folder, and list names and IDs."
     },
     {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operation CreateTask.",
       "is_write": true,
+      "label": "Curated wrapper commands",
       "name": "create-task",
       "operation_ids": [
         "CreateTask"
       ],
+      "source": "curated_wrapper",
       "summary": "Create a task in a ClickUp list."
     },
     {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operation CreateTask.",
       "is_write": true,
+      "label": "Curated wrapper commands",
       "name": "create-subtask",
       "operation_ids": [
         "CreateTask"
       ],
+      "source": "curated_wrapper",
       "summary": "Create a subtask under a parent task."
     },
     {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operation UpdateTask.",
       "is_write": true,
+      "label": "Curated wrapper commands",
       "name": "set-status",
       "operation_ids": [
         "UpdateTask"
       ],
-      "summary": "Update a task status."
+      "source": "curated_wrapper",
+      "summary": "Update a task status with wrapper status validation."
     },
     {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operations GetTask, GetList.",
+      "is_write": false,
+      "label": "Curated wrapper commands",
+      "name": "task-statuses",
+      "operation_ids": [
+        "GetTask",
+        "GetList"
+      ],
+      "source": "curated_wrapper",
+      "summary": "Discover valid statuses for a task or list."
+    },
+    {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operation UpdateTask.",
       "is_write": true,
+      "label": "Curated wrapper commands",
       "name": "set-description",
       "operation_ids": [
         "UpdateTask"
       ],
-      "summary": "Update a task description (plain or markdown)."
+      "source": "curated_wrapper",
+      "summary": "Update a task description, preferring markdown_content for rich formatting."
     },
     {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operation UpdateTask.",
       "is_write": true,
+      "label": "Curated wrapper commands",
       "name": "update-task",
       "operation_ids": [
         "UpdateTask"
       ],
-      "summary": "Update arbitrary fields on a task."
+      "source": "curated_wrapper",
+      "summary": "Update common task fields, including status validation."
     },
     {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operation GetTask.",
+      "is_write": false,
+      "label": "Curated wrapper commands",
+      "name": "get-task",
+      "operation_ids": [
+        "GetTask"
+      ],
+      "source": "curated_wrapper",
+      "summary": "Fetch a task with optional summary or field projection output."
+    },
+    {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operations GetTask, UpdateTask.",
       "is_write": true,
+      "label": "Curated wrapper commands",
       "name": "assign",
       "operation_ids": [
         "GetTask",
         "UpdateTask"
       ],
+      "source": "curated_wrapper",
       "summary": "Add, remove, or replace task assignees."
     },
     {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operations GetAuthorizedUser, UpdateTask.",
       "is_write": true,
+      "label": "Curated wrapper commands",
       "name": "assign-me",
       "operation_ids": [
         "GetAuthorizedUser",
         "UpdateTask"
       ],
+      "source": "curated_wrapper",
       "summary": "Assign the authorized user to a task."
     },
     {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operation UpdateTask.",
       "is_write": true,
+      "label": "Curated wrapper commands",
       "name": "set-due-date",
       "operation_ids": [
         "UpdateTask"
       ],
+      "source": "curated_wrapper",
       "summary": "Set or clear a task due date."
     },
     {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operation CreateTaskComment.",
       "is_write": true,
+      "label": "Curated wrapper commands",
       "name": "comment",
       "operation_ids": [
         "CreateTaskComment"
       ],
+      "source": "curated_wrapper",
       "summary": "Add a comment to a task."
     },
     {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operation UpdateComment.",
       "is_write": true,
+      "label": "Curated wrapper commands",
       "name": "edit-comment",
       "operation_ids": [
         "UpdateComment"
       ],
+      "source": "curated_wrapper",
       "summary": "Edit an existing comment."
     },
     {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operation CreateChecklist.",
       "is_write": true,
+      "label": "Curated wrapper commands",
       "name": "create-checklist",
       "operation_ids": [
         "CreateChecklist"
       ],
-      "summary": "Create a checklist on a task."
+      "source": "curated_wrapper",
+      "summary": "Create a checklist on a task, optionally with initial items."
     },
     {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operations GetTask, CreateChecklist, CreateChecklistItem, EditChecklistItem.",
       "is_write": true,
+      "label": "Curated wrapper commands",
+      "name": "sync-checklist",
+      "operation_ids": [
+        "GetTask",
+        "CreateChecklist",
+        "CreateChecklistItem",
+        "EditChecklistItem"
+      ],
+      "source": "curated_wrapper",
+      "summary": "Create or update checklist items from a non-destructive item list."
+    },
+    {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operation CreateChecklistItem.",
+      "is_write": true,
+      "label": "Curated wrapper commands",
       "name": "create-checklist-item",
       "operation_ids": [
         "CreateChecklistItem"
       ],
+      "source": "curated_wrapper",
       "summary": "Add an item to a checklist."
     },
     {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operation EditChecklistItem.",
       "is_write": true,
+      "label": "Curated wrapper commands",
       "name": "check-item",
       "operation_ids": [
         "EditChecklistItem"
       ],
+      "source": "curated_wrapper",
       "summary": "Edit a checklist item (resolve, rename, reparent, reassign)."
     },
     {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operation GetTask.",
       "is_write": false,
+      "label": "Curated wrapper commands",
       "name": "subtasks",
       "operation_ids": [
         "GetTask"
       ],
+      "source": "curated_wrapper",
       "summary": "Fetch a task with its subtasks expanded."
     },
     {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operations AddTagToTask, RemoveTagFromTask.",
       "is_write": true,
+      "label": "Curated wrapper commands",
       "name": "tags",
       "operation_ids": [
         "AddTagToTask",
         "RemoveTagFromTask"
       ],
+      "source": "curated_wrapper",
       "summary": "Add or remove tags on a task."
     },
     {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operations Getrunningtimeentry, StartatimeEntry, StopatimeEntry.",
       "is_write": true,
+      "label": "Curated wrapper commands",
       "name": "timer",
       "operation_ids": [
         "Getrunningtimeentry",
         "StartatimeEntry",
         "StopatimeEntry"
       ],
+      "source": "curated_wrapper",
       "summary": "Inspect, start, or stop the running timer."
     }
   ]

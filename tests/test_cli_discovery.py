@@ -20,6 +20,7 @@ def test_tools_list_table_supports_write_only(capsys) -> None:
 
     output = capsys.readouterr().out
 
+    assert "Generated OpenAPI operations" in output
     assert "create-task" in output
     assert "Update Task" in output
 
@@ -30,7 +31,29 @@ def test_hotkeys_list_json_includes_curated_toolchains(capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     names = {hotkey["name"] for hotkey in payload["hotkeys"]}
 
-    assert {"search", "create-task", "set-status", "assign", "set-due-date", "comment", "tags", "timer"} <= names
+    assert {
+        "search",
+        "get-task",
+        "task-statuses",
+        "create-task",
+        "set-status",
+        "assign",
+        "set-due-date",
+        "comment",
+        "create-checklist",
+        "sync-checklist",
+        "tags",
+        "timer",
+    } <= names
+
+
+def test_hotkeys_list_table_labels_curated_wrappers(capsys) -> None:
+    assert main(["hotkeys", "list"]) == 0
+
+    output = capsys.readouterr().out
+
+    assert "Curated wrappers" in output
+    assert "sync-checklist" in output
 
 
 def test_run_tool_specific_help_shows_selected_flags(capsys) -> None:
@@ -42,3 +65,9 @@ def test_run_tool_specific_help_shows_selected_flags(capsys) -> None:
     assert "--name" in output
     assert "--dry-run" in output
     assert "--live" in output
+
+    assert main(["run", "update-task", "--help"]) == 0
+    output = capsys.readouterr().out
+
+    assert "--status" in output
+    assert "For full API fields, use generated operation UpdateTask." in output

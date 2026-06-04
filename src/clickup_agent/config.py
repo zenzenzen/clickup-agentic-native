@@ -1,4 +1,9 @@
-"""Configuration helpers for local ClickUp credentials and defaults."""
+"""Configuration helpers for local ClickUp credentials and defaults.
+
+clickup-agent intentionally reads one user-level env file outside any repo so
+MCP clients, CLI commands, and shell installers share credentials without
+copying secrets into workspaces.
+"""
 
 from __future__ import annotations
 
@@ -23,6 +28,8 @@ class ConfigError(RuntimeError):
 
 @dataclass(frozen=True)
 class ClickUpConfig:
+    """Resolved ClickUp runtime settings safe to pass inside the process."""
+
     api_key: str
     workspace_id: str | None = None
     webhook_secret: str | None = None
@@ -46,6 +53,8 @@ def read_env_file() -> dict[str, str]:
             continue
         key, value = cleaned.split("=", 1)
         key = key.strip()
+        # Ignore unrelated env values so local shell state cannot quietly alter
+        # request construction or leak through doctor/status output.
         if key in CLICKUP_ENV_KEYS:
             values[key] = value.strip().strip('"').strip("'")
     return values
@@ -66,6 +75,7 @@ def env_file_warnings() -> list[str]:
 
 
 def config_status() -> dict[str, object]:
+    """Return redacted config presence for doctor/MCP health checks."""
     selected_env_file = default_env_file()
     values = read_env_file()
     return {
@@ -78,6 +88,7 @@ def config_status() -> dict[str, object]:
 
 
 def load_config() -> ClickUpConfig:
+    """Load required credentials for live ClickUp API calls."""
     selected_env_file = default_env_file()
     values = read_env_file()
     api_key = values.get("CLICKUP_API_KEY")
@@ -91,10 +102,12 @@ def load_config() -> ClickUpConfig:
 
 
 def load_workspace_id() -> str | None:
+    """Return the optional default workspace for wrappers that can infer it."""
     return read_env_file().get("CLICKUP_WORKSPACE_ID") or None
 
 
 def redact_secret(value: str, secret: str | None) -> str:
+    """Remove known token material from messages before user-facing output."""
     if not secret:
         return value
     return value.replace(secret, "<redacted>")

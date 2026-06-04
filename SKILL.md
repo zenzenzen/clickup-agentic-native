@@ -22,6 +22,8 @@ clickup-agent mcp
 
 If working from the repo, use the repo root as the working directory. If `clickup-agent` is not installed, reinstall with `uv tool install . --python 3.12 --reinstall`.
 
+For repo orientation, read `CONTEXT.md` first, then `UBIQUITOUS_LANGUAGE.md` for canonical terms and ambiguity notes. Use those local files instead of the workspace-level glossary when working in this repo.
+
 The canonical local secret file is `$HOME/.config/clickup-agent/.env`. That is the only native `clickup-agent` env file; do not search workspaces, do not use `CLICKUP_ENV_FILE`, and do not use `CLICKUP_API_TOKEN`.
 
 ## Secret Safety
@@ -34,19 +36,22 @@ The canonical local secret file is `$HOME/.config/clickup-agent/.env`. That is t
 
 ## Common Workflows
 
+- **Orient a future agent**: read `CONTEXT.md`, `UBIQUITOUS_LANGUAGE.md`, and `references/capabilities.md` before changing public CLI/MCP language.
 - **Install or repair local CLI**: read `references/setup.md`, then use `uv tool install . --python 3.12 --reinstall`.
 - **Create local secrets safely**: use `bash scripts/install.sh` or follow `references/setup.md`; the installer always writes `$HOME/.config/clickup-agent/.env`.
 - **Connect Cursor or another LLM client**: read `references/mcp-cursor.md`; use `clickup-agent mcp` as the stdio server command.
 - **Explain capabilities**: read `references/capabilities.md` and distinguish implemented scaffolding from planned ClickUp API tools.
-- **Use an uncovered generated operation**: run `clickup-agent tools list --format json`, then `clickup-agent run <operation-id-or-name> --dry-run ...`; only add `--live` when the user explicitly wants the mutation.
+- **Use an uncovered generated operation**: run `clickup-agent tools list --format json`, then `clickup-agent run <PascalCaseOperationId> --dry-run ...`; only add `--live` when the user explicitly wants the mutation.
+- **Use a curated wrapper**: run `clickup-agent hotkeys list`, then `clickup-agent run <kebab-case-wrapper> --dry-run ...`. Exact PascalCase operation IDs select generated operations; kebab-case names select curated wrappers when available.
+- **Work with task descriptions**: prefer `markdown_content`/`--markdown-content` for rich descriptions, and expect ClickUp to normalize rendered text when task data is fetched later.
 - **Back-link development work**: read `references/development-links.md`; if a GitHub PR already exists for the current branch, include its URL when updating the related ClickUp task.
 - **Install this skill for Codex discovery**: run `bash scripts/install-skill.sh`.
 
 ## Current Truth
 
-Implemented today: Python 3.12 CLI, generated ClickUp V2 tool catalog, `tools list`, `hotkeys list`, task/search/comment/checklist/timer `run` toolchains, generated-operation fallback through `clickup-agent run <operation-id-or-name>`, `doctor --live-auth`, MCP bootstrap/status tools, direct MCP wrappers for the implemented run toolchains, `clickup_agent_run_operation`, Cursor MCP config support, and skill installation.
+Implemented today: Python 3.12 CLI, generated ClickUp V2 tool catalog, `tools list` for generated OpenAPI operations, `hotkeys list` for curated wrappers, task/search/comment/checklist/timer `run` wrappers, compact task fetches, task status discovery, checklist sync, generated-operation fallback through `clickup-agent run <operation-id-or-name>`, `doctor --live-auth`, MCP bootstrap/status tools, direct MCP wrappers for the implemented run wrappers, `clickup_agent_run_operation`, Cursor MCP config support, and skill installation.
 
-Planned: broader ClickUp API workflows for docs, users, guests, user groups, lists, attachments, webhooks, admin surfaces, richer entity resolution, and expanded hotkey toolchains.
+Planned: broader ClickUp API workflows for docs, users, guests, user groups, lists, attachments, webhooks, admin surfaces, richer entity resolution, and expanded curated wrappers.
 
 ## Validation
 
@@ -62,6 +67,10 @@ clickup-agent doctor || true
 clickup-agent run create-task --dry-run --list-id 123 --name "Smoke test"
 clickup-agent run list-hierarchy --dry-run --team-id 123
 clickup-agent run update-task --dry-run --task-id abc --name "Smoke rename"
-clickup-agent run create-checklist --dry-run --task-id abc --name "Smoke checklist"
+clickup-agent run update-task --dry-run --task-id abc --status "in progress"
+clickup-agent run get-task --dry-run --task-id abc --summary
+clickup-agent run task-statuses --dry-run --task-id abc
+clickup-agent run create-checklist --dry-run --task-id abc --name "Smoke checklist" --items checklist.json --resolved
+clickup-agent run sync-checklist --dry-run --task-id abc --name "Smoke checklist" --items checklist.json --resolve-all
 clickup-agent run CreateChecklist --dry-run --task-id abc --name "Smoke generated op"
 ```

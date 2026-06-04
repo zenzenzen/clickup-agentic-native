@@ -1,4 +1,4 @@
-"""Module runner for `python -m clickup_agent`."""
+"""Module runner that sends `python -m clickup_agent` through the CLI path."""
 
 from .cli import main
 

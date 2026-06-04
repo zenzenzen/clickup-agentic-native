@@ -1,7 +1,8 @@
-"""Command-line entrypoint for the ClickUp agent.
+"""User-facing CLI for local ClickUp automation.
 
-The first scaffold keeps commands stable while the actual ClickUp client,
-tool registry, and MCP server are implemented behind them.
+This module owns command discovery, secret-safe diagnostics, and JSON/table
+rendering. Runtime behavior lives in focused modules so the CLI can stay a thin
+contract layer for humans, agents, and MCP clients.
 """
 
 from __future__ import annotations
@@ -124,6 +125,7 @@ def _cmd_tools_list(args: argparse.Namespace) -> int:
     if args.format == "json":
         _print_json(
             {
+                "kind": "generated_openapi_operations",
                 "source": catalog.source,
                 "source_version": catalog.source_version,
                 "count": len(rows),
@@ -131,6 +133,7 @@ def _cmd_tools_list(args: argparse.Namespace) -> int:
             }
         )
         return 0
+    print("Generated OpenAPI operations. For curated wrappers, run `clickup-agent hotkeys list`.")
     _print_table(
         rows,
         [
@@ -159,6 +162,7 @@ def _cmd_hotkeys_list(args: argparse.Namespace) -> int:
     if args.format == "json":
         _print_json(
             {
+                "kind": "curated_wrappers",
                 "source": catalog.source,
                 "source_version": catalog.source_version,
                 "count": len(rows),
@@ -166,6 +170,7 @@ def _cmd_hotkeys_list(args: argparse.Namespace) -> int:
             }
         )
         return 0
+    print("Curated wrappers. For full generated OpenAPI operations, run `clickup-agent tools list`.")
     _print_table(
         rows,
         [
