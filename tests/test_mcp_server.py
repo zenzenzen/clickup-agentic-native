@@ -59,6 +59,7 @@ def test_mcp_registers_direct_clickup_tools() -> None:
         "clickup_agent_dev_sync",
         "clickup_agent_work_log",
         "clickup_agent_decision_log",
+        "clickup_agent_hotfix_doc",
     } <= names
 
 
@@ -133,6 +134,18 @@ def test_mcp_write_toolchains_default_to_dry_run() -> None:
         ),
         ("work-log", {"task_id": "abc", "add_items": ["Run pytest"]}, "GetTask"),
         ("decision-log", {"task_id": "abc", "decision": "Switched X to Y"}, "CreateTaskComment"),
+        (
+            "hotfix-doc",
+            {
+                "list_id": "123",
+                "title": "Fix PR docs",
+                "pr_url": "https://github.com/acme/repo/pull/12",
+                "branch": "hotfix/docs",
+                "problem": "Docs missed the changed endpoint.",
+                "fix": "Documented the endpoint.",
+            },
+            "CreateTask",
+        ),
     ]
 
     for name, payload, operation_id in cases:
@@ -199,25 +212,39 @@ def test_mcp_new_wrappers_forward_payloads_and_default_writes_to_dry_run(monkeyp
         items=[{"id": "item-1", "name": "Smoke test", "resolved": True}],
         resolve_all=True,
     )
+    hotfix = server._tool_manager._tools["clickup_agent_hotfix_doc"].fn(
+        list_id="123",
+        title="Fix PR docs",
+        pr_url="https://github.com/acme/repo/pull/12",
+        branch="hotfix/docs",
+        problem="Docs missed the changed endpoint.",
+        fix="Documented the endpoint.",
+        changed_files=["README.md"],
+        validation="uv run pytest",
+    )
 
     assert update["ok"] is True
     assert create["dry_run"] is True
     assert sync["dry_run"] is True
+    assert hotfix["dry_run"] is True
     assert create["response"]["checklist_item"]["id"] == "item-1"
     assert create["response"]["created_items"][0]["id"] == "item-1"
 
     update_payload = json.loads(calls[0][1][calls[0][1].index("--json") + 1])
     create_payload = json.loads(calls[1][1][calls[1][1].index("--json") + 1])
     sync_payload = json.loads(calls[2][1][calls[2][1].index("--json") + 1])
+    hotfix_payload = json.loads(calls[3][1][calls[3][1].index("--json") + 1])
 
     assert calls == [
         ("update-task", calls[0][1]),
         ("create-checklist", calls[1][1]),
         ("sync-checklist", calls[2][1]),
+        ("hotfix-doc", calls[3][1]),
     ]
     assert calls[0][1][0] == "--dry-run"
     assert calls[1][1][0] == "--dry-run"
     assert calls[2][1][0] == "--dry-run"
+    assert calls[3][1][0] == "--dry-run"
     assert update_payload == {"task_id": "task-1", "status": "done"}
     assert create_payload == {
         "task_id": "task-1",
@@ -230,6 +257,16 @@ def test_mcp_new_wrappers_forward_payloads_and_default_writes_to_dry_run(monkeyp
         "name": "Launch",
         "items": [{"id": "item-1", "name": "Smoke test", "resolved": True}],
         "resolve_all": True,
+    }
+    assert hotfix_payload == {
+        "list_id": "123",
+        "title": "Fix PR docs",
+        "pr_url": "https://github.com/acme/repo/pull/12",
+        "branch": "hotfix/docs",
+        "problem": "Docs missed the changed endpoint.",
+        "fix": "Documented the endpoint.",
+        "changed_files": ["README.md"],
+        "validation": "uv run pytest",
     }
 
 

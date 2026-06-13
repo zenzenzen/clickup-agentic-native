@@ -92,6 +92,39 @@ def _cmd_mcp(_: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_onboard(_: argparse.Namespace) -> int:
+    print(_onboarding_text())
+    return 0
+
+
+def _onboarding_text() -> str:
+    return "\n".join(
+        [
+            "clickup-agent is a local, dry-run-first CLI and MCP server for agentic ClickUp work.",
+            "",
+            "Setup:",
+            "- Store secrets only in ~/.config/clickup-agent/.env.",
+            "- Check local config with: clickup-agent doctor",
+            "- Verify read-only auth with: clickup-agent doctor --live-auth",
+            "",
+            "Curated toolchains:",
+            "- Discover wrappers with: clickup-agent hotkeys list",
+            "- Preview writes with: clickup-agent run <wrapper> --dry-run ...",
+            "- Execute writes only when intended with: clickup-agent run <wrapper> --live ...",
+            "",
+            "Macro movesets:",
+            "- dev-sync: trigger phrases like \"sync this task\" or \"link the PR\".",
+            "- branch audit: trigger phrases like \"audit my branches\" or \"which branches are merged\".",
+            "- hotfix-doc: trigger phrases like \"log this hotfix\" or \"document PR #N as a hotfix task\".",
+            "",
+            "Examples:",
+            "- clickup-agent dev audit",
+            "- clickup-agent run dev-sync --dry-run --task-id abc --branch feature/demo",
+            "- clickup-agent run hotfix-doc --dry-run --list-id 123 --title \"Fix docs\" --pr-url https://github.com/org/repo/pull/1 --problem \"What broke\" --fix \"What changed\"",
+        ]
+    )
+
+
 def _print_json(data: object) -> None:
     print(json.dumps(data, indent=2, sort_keys=True))
 
@@ -307,6 +340,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     mcp = subcommands.add_parser("mcp", help="Start the future LLM/MCP tool server.")
     mcp.set_defaults(func=_cmd_mcp)
+
+    for name in ("onboard", "guide", "welcome"):
+        onboard = subcommands.add_parser(name, help="Print the clickup-agent onboarding briefing.")
+        onboard.set_defaults(func=_cmd_onboard)
 
     connect = subcommands.add_parser("connect", help="Print or write MCP client registration.")
     connect.add_argument("client", choices=["cursor", "claude-code", "codex", "generic"], help="Client to connect.")

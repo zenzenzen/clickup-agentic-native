@@ -57,6 +57,9 @@ install_skill() {
   printf '  "Use clickup-agentic-native to set up Cursor MCP access."\n'
   printf '  "Use clickup-agentic-native to repair my clickup-agent install."\n'
   printf '  "Use clickup-agentic-native to explain current ClickUp capabilities."\n'
+  printf '\nOnboarding:\n'
+  printf '  clickup-agent onboard\n'
+  printf '  Macro movesets: dev-sync, branch audit, hotfix-doc.\n'
 }
 
 install_skill "$@"

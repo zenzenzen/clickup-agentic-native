@@ -400,6 +400,10 @@ main() {
 
   print_llm_client_snippet
 
+  say "Onboarding and macro movesets:"
+  printf 'clickup-agent onboard\n'
+  printf 'Includes dev-sync, branch audit, and hotfix-doc examples.\n'
+
   say "Next check:"
   printf 'clickup-agent connect <cursor|claude-code|codex|generic>\n'
   printf 'clickup-agent doctor --live-auth\n'

@@ -10,6 +10,7 @@ From a fresh clone:
 
 ```bash
 bash scripts/quickstart.sh
+clickup-agent onboard
 clickup-agent connect <cursor|claude-code|codex|generic>
 clickup-agent doctor --live-auth
 ```
@@ -38,6 +39,7 @@ The CLI grows around clear, memorable commands:
 
 ```bash
 clickup-agent chat
+clickup-agent onboard
 clickup-agent tools list
 clickup-agent hotkeys list
 clickup-agent run <curated-wrapper-or-generated-operation>
@@ -86,7 +88,11 @@ clickup-agent run check-item --dry-run --checklist-id chk --item-id item --resol
 clickup-agent run subtasks --dry-run --task-id abc
 clickup-agent run tags --dry-run --task-id abc --add review --remove stale
 clickup-agent run timer --dry-run --action start --team-id 123 --task-id abc
+clickup-agent run hotfix-doc --dry-run --list-id 456 --title "Fix docs" --pr-url https://github.com/org/repo/pull/1 --problem "What broke" --fix "What changed"
 ```
+
+Bundled macro movesets include `dev-sync`, branch audit with `dev audit`, and
+`hotfix-doc`. Use `clickup-agent onboard` for trigger phrases and examples.
 
 Checklist item files can mix plain item names and item objects:
 
