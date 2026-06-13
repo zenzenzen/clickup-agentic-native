@@ -315,6 +315,222 @@ def test_get_task_summary_and_field_projection_live_execution() -> None:
     }
 
 
+def test_get_task_details_live_execution_returns_second_brain_fields() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "id": "abc",
+                "url": "https://app.clickup.com/t/abc",
+                "name": "Ship it",
+                "status": {"status": "in progress"},
+                "tags": [{"name": "agent"}, {"name": "sync"}],
+                "assignees": [{"id": 42, "username": "Ada", "email": "ada@example.test"}],
+                "checklists": [
+                    {
+                        "id": "chk",
+                        "name": "Development Sync",
+                        "items": [
+                            {"id": "one", "name": "Branch pushed", "resolved": True},
+                            {"id": "two", "name": "PR opened", "resolved": False},
+                        ],
+                    }
+                ],
+                "date_updated": "1710000000000",
+                "description": "Plain description",
+                "markdown_description": "## Markdown description",
+            },
+        )
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    result = runner.run("get-task", ["--task-id", "abc", "--details"])
+
+    assert result.response == {
+        "id": "abc",
+        "url": "https://app.clickup.com/t/abc",
+        "name": "Ship it",
+        "status": "in progress",
+        "tags": ["agent", "sync"],
+        "assignees": [{"id": 42, "username": "Ada"}],
+        "checklists": [
+            {
+                "id": "chk",
+                "name": "Development Sync",
+                "total": 2,
+                "resolved": 1,
+                "unresolved": 1,
+                "items": [
+                    {"id": "one", "name": "Branch pushed", "resolved": True},
+                    {"id": "two", "name": "PR opened", "resolved": False},
+                ],
+            }
+        ],
+        "updated": "1710000000000",
+        "description": "Plain description",
+        "markdown_description": "## Markdown description",
+    }
+
+
+def test_comments_wrapper_lists_and_adds_task_comments() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.method == "GET":
+            return httpx.Response(200, json={"comments": [{"id": "c1", "comment_text": "Hello"}]})
+        return httpx.Response(200, json={"id": "c2", "comment_text": "Added"})
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    listed = runner.run("comments", ["--live", "--task-id", "abc", "--list"])
+    added = runner.run("comments", ["--live", "--task-id", "abc", "--add", "--text", "Added"])
+
+    assert [request.method for request in requests] == ["GET", "POST"]
+    assert [request.url.path for request in requests] == ["/api/v2/task/abc/comment", "/api/v2/task/abc/comment"]
+    assert json.loads(requests[1].content) == {"comment_text": "Added", "notify_all": False}
+    assert listed.operations[0]["operation_id"] == "GetTaskComments"
+    assert listed.response == {"comments": [{"id": "c1", "comment_text": "Hello"}]}
+    assert added.operations[0]["operation_id"] == "CreateTaskComment"
+    assert added.response == {"id": "c2", "comment_text": "Added"}
+
+
+def test_dev_sync_dry_run_plans_reads_backlink_status_comment_and_checklist(capsys) -> None:
+    assert (
+        main(
+            [
+                "run",
+                "dev-sync",
+                "--dry-run",
+                "--task-id",
+                "abc",
+                "--branch",
+                "feature/task",
+                "--pr-url",
+                "https://github.com/acme/repo/pull/12",
+                "--pr-title",
+                "Ship feature",
+                "--pr-number",
+                "12",
+                "--pr-state",
+                "open",
+                "--latest-commit",
+                "abc123 Fix bug",
+                "--comment",
+                "Implementation note",
+                "--check-item",
+                "Lint/type checks passed",
+            ]
+        )
+        == 0
+    )
+
+    payload = _json_output(capsys)
+    operation_ids = [operation["operation_id"] for operation in payload["operations"]]
+
+    assert payload["dry_run"] is True
+    assert operation_ids[:2] == ["GetTask", "GetTaskComments"]
+    assert "CreateTaskComment" in operation_ids
+    assert "CreateChecklistItem" in operation_ids
+    assert payload["response"]["task_id"] == "abc"
+    assert payload["response"]["branch"] == "feature/task"
+    assert payload["response"]["pr_state"] == "open"
+    assert payload["response"]["planned_updates"]["status_comment"] == "create"
+    assert payload["response"]["planned_updates"]["checklist"] == "Development Sync"
+    assert payload["response"]["duplicates_avoided"]["backlink"] is False
+
+
+def test_dev_sync_live_skips_existing_backlink_and_updates_sync_comment() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.method == "GET" and request.url.path == "/api/v2/task/abc":
+            return httpx.Response(
+                200,
+                json={
+                    "id": "abc",
+                    "description": "Existing https://github.com/acme/repo/pull/12",
+                    "checklists": [
+                        {
+                            "id": "chk",
+                            "name": "Development Sync",
+                            "items": [{"id": "item-1", "name": "Branch pushed", "resolved": False}],
+                        }
+                    ],
+                },
+            )
+        if request.method == "GET" and request.url.path == "/api/v2/task/abc/comment":
+            return httpx.Response(
+                200,
+                json={
+                    "comments": [
+                        {"id": "sync-cmt", "comment_text": "[dev-sync] GitHub development state - old"},
+                    ]
+                },
+            )
+        if request.method == "POST" and request.url.path == "/api/v2/checklist/chk/checklist_item":
+            body = json.loads(request.content)
+            return httpx.Response(200, json={"checklist_item": {"id": f"new-{len(requests)}", "name": body["name"]}})
+        return httpx.Response(200, json={"ok": True})
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    result = runner.run(
+        "dev-sync",
+        [
+            "--live",
+            "--task-id",
+            "abc",
+            "--branch",
+            "feature/task",
+            "--pr-url",
+            "https://github.com/acme/repo/pull/12",
+            "--pr-number",
+            "12",
+            "--pr-title",
+            "Ship feature",
+            "--pr-state",
+            "open",
+        ],
+    )
+
+    paths = [request.url.path for request in requests]
+    create_comment_requests = [
+        request
+        for request in requests
+        if request.method == "POST" and request.url.path == "/api/v2/task/abc/comment"
+    ]
+
+    assert "/api/v2/comment/sync-cmt" in paths
+    assert not create_comment_requests
+    assert result.response["duplicates_avoided"]["backlink"] is True
+    assert result.response["planned_updates"]["status_comment"] == "update"
+
+
+def test_comment_help_cross_references_comments_wrapper(capsys) -> None:
+    assert main(["run", "comment", "--help"]) == 0
+
+    output = capsys.readouterr().out
+
+    assert "Use `clickup-agent run comments --list` to read task comments." in output
+
+
 def test_task_statuses_discovers_list_statuses_from_task_or_list() -> None:
     requests: list[httpx.Request] = []
 

@@ -12,7 +12,9 @@ Read `../CONTEXT.md` for product intent and `../UBIQUITOUS_LANGUAGE.md` for cano
 - `clickup-agent mcp`
 - Generated ClickUp V2 OpenAPI catalog with 137 normalized operations
 - `clickup-agent tools list [--format table|json] [--tag <tag>] [--write-only]`
+- `clickup-agent tools find <query...> [--format table|json]`
 - `clickup-agent hotkeys list [--format table|json]`
+- `clickup-agent dev pr`
 - `clickup-agent run search`
 - `clickup-agent run list-hierarchy`
 - `clickup-agent run create-task`
@@ -26,6 +28,7 @@ Read `../CONTEXT.md` for product intent and `../UBIQUITOUS_LANGUAGE.md` for cano
 - `clickup-agent run assign-me`
 - `clickup-agent run set-due-date`
 - `clickup-agent run comment`
+- `clickup-agent run comments`
 - `clickup-agent run edit-comment`
 - `clickup-agent run create-checklist`
 - `clickup-agent run sync-checklist`
@@ -34,6 +37,7 @@ Read `../CONTEXT.md` for product intent and `../UBIQUITOUS_LANGUAGE.md` for cano
 - `clickup-agent run subtasks`
 - `clickup-agent run tags`
 - `clickup-agent run timer`
+- `clickup-agent run dev-sync`
 - `clickup-agent run <generated operation name or ID>`
 - `scripts/install.sh` for env file, local install, and Cursor MCP config
 - `scripts/install-skill.sh` for Codex skill discovery
@@ -43,6 +47,7 @@ Read `../CONTEXT.md` for product intent and `../UBIQUITOUS_LANGUAGE.md` for cano
   - `clickup_agent_status`
   - `clickup_agent_tooling_plan`
   - `clickup_agent_run_operation`
+  - `clickup_agent_dev_pr`
 - Direct MCP tools:
   - `clickup_agent_search`
   - `clickup_agent_list_hierarchy`
@@ -65,6 +70,7 @@ Read `../CONTEXT.md` for product intent and `../UBIQUITOUS_LANGUAGE.md` for cano
   - `clickup_agent_subtasks`
   - `clickup_agent_tags`
   - `clickup_agent_timer`
+  - `clickup_agent_dev_sync`
 
 ## CLI Command Shape
 
@@ -79,7 +85,7 @@ clickup-agent doctor
 clickup-agent mcp
 ```
 
-`chat` remains a placeholder. `tools list` discovers generated OpenAPI operations; `hotkeys list` discovers curated wrapper commands. The first `run` commands, generated operation fallback, and direct MCP wrappers execute real generated or curated workflows. MCP write wrappers default to dry-run unless the caller explicitly sets `live` to true.
+`chat` remains a placeholder. `tools list` discovers generated OpenAPI operations; `tools find` searches generated operation names, operation IDs, summaries, and tags; `hotkeys list` discovers curated wrapper commands. The first `run` commands, generated operation fallback, and direct MCP wrappers execute real generated or curated workflows. MCP write wrappers default to dry-run unless the caller explicitly sets `live` to true.
 
 ## Generated Toolsets
 
@@ -102,6 +108,7 @@ Agents can call generated operations directly through `clickup-agent run <operat
 - `assign-me`: assign the authorized user using `GetAuthorizedUser` and `UpdateTask`
 - `set-due-date`: task due date update using `UpdateTask`
 - `comment`: task comment creation using `CreateTaskComment`
+- `comments`: task comment listing or creation using `GetTaskComments` and `CreateTaskComment`
 - `edit-comment`: comment editing using `UpdateComment`
 - `create-checklist`: checklist creation using `CreateChecklist`, optionally followed by initial checklist item creation
 - `sync-checklist`: non-destructive checklist item create/update using `GetTask`, `CreateChecklist`, `CreateChecklistItem`, and `EditChecklistItem`
@@ -110,11 +117,11 @@ Agents can call generated operations directly through `clickup-agent run <operat
 - `subtasks`: subtask retrieval using `GetTask`
 - `tags`: add or remove task tags using `AddTagToTask` and `RemoveTagFromTask`
 - `timer`: current, start, and stop timer actions using time-entry operations
+- `dev-sync`: GitHub branch/PR state sync using `GetTask`, `GetTaskComments`, task/comment updates, and non-destructive checklist item convergence
 
 ## Still Planned
 
 - Full comments coverage for list/view/threaded comments
-- Link an existing branch PR into the related ClickUp task for development-reference parity
 - Docs, chat, attachments, webhooks, admin workflows, and broader hierarchy/entity resolution
 
 ## Formatting Notes

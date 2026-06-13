@@ -55,6 +55,8 @@ def test_mcp_registers_direct_clickup_tools() -> None:
         "clickup_agent_subtasks",
         "clickup_agent_tags",
         "clickup_agent_timer",
+        "clickup_agent_dev_pr",
+        "clickup_agent_dev_sync",
     } <= names
 
 
@@ -116,6 +118,16 @@ def test_mcp_write_toolchains_default_to_dry_run() -> None:
         ),
         ("tags", {"task_id": "abc", "add": ["review"]}, "AddTagToTask"),
         ("timer", {"action": "start", "team_id": "456", "task_id": "abc"}, "StartatimeEntry"),
+        (
+            "dev-sync",
+            {
+                "task_id": "abc",
+                "branch": "feature/task",
+                "pr_url": "https://github.com/acme/repo/pull/12",
+                "pr_number": 12,
+            },
+            "GetTask",
+        ),
     ]
 
     for name, payload, operation_id in cases:
@@ -124,6 +136,19 @@ def test_mcp_write_toolchains_default_to_dry_run() -> None:
         assert result["ok"] is True
         assert result["dry_run"] is True
         assert operation_id in [operation["operation_id"] for operation in result["operations"]]
+
+
+def test_mcp_dev_pr_returns_compact_state(monkeypatch) -> None:
+    class FakeResult:
+        def to_dict(self) -> dict:
+            return {"state": "not_found", "branch": "feature/task", "remote": "origin", "pr": None}
+
+    monkeypatch.setattr("clickup_agent.mcp_server.inspect_dev_pr", lambda cwd=None, timeout=10.0: FakeResult())
+
+    server = create_server()
+    result = server._tool_manager._tools["clickup_agent_dev_pr"].fn(timeout=2.0, repo="/tmp/repo")
+
+    assert result == {"state": "not_found", "branch": "feature/task", "remote": "origin", "pr": None}
 
 
 def test_mcp_new_wrappers_forward_payloads_and_default_writes_to_dry_run(monkeypatch) -> None:

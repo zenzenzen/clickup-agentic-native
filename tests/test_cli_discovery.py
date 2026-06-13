@@ -25,6 +25,17 @@ def test_tools_list_table_supports_write_only(capsys) -> None:
     assert "Update Task" in output
 
 
+def test_tools_find_returns_compact_comment_matches(capsys) -> None:
+    assert main(["tools", "find", "task", "comments"]) == 0
+
+    output = capsys.readouterr().out
+
+    assert "Generated OpenAPI operations matching: task comments" in output
+    assert "get-task-comments" in output
+    assert "GetTaskComments" in output
+    assert "GetTask " not in output
+
+
 def test_hotkeys_list_json_includes_curated_toolchains(capsys) -> None:
     assert main(["hotkeys", "list", "--format", "json"]) == 0
 

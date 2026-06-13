@@ -7,37 +7,58 @@ Use this when a ClickUp task is being created, updated, summarized, or commented
 If the current work is on a Git branch, check whether a GitHub PR already exists for that branch:
 
 ```bash
-git branch --show-current
-gh pr view --json url,number,title,headRefName,baseRefName,state 2>/dev/null
+clickup-agent dev pr
 ```
 
-If `gh pr view` succeeds, treat the returned `url` as the canonical PR link for the current branch. If it fails, do not invent a PR URL and do not create a PR unless the user explicitly asks.
+`dev pr` is read-only and reports one explicit state: `found`, `not_found`,
+`timeout`, `gh_missing`, `unauthenticated`, or `no_remote`. If it returns
+`found`, treat the returned `pr.url` as the canonical PR link for the current
+branch. If it does not return `found`, do not invent a PR URL and do not create
+a PR unless the user explicitly asks.
 
 ## ClickUp Back-Link Rule
 
-When creating or updating the related ClickUp task, include the existing PR link in the task context. Preferred order once ClickUp write tools exist:
+When creating or updating the related ClickUp task, include the existing PR link in the task context. Preferred order:
 
-1. Add or update a dedicated development/reference field if the workspace defines one.
-2. Otherwise add a task comment with the PR title, number, URL, source branch, and base branch.
-3. Otherwise include the PR URL in the task description or task update summary.
+1. Use `clickup-agent run dev-sync --dry-run` to preview the managed ClickUp updates.
+2. Use `--live` only when the user wants ClickUp mutated.
+3. Let `dev-sync` manage only its visible development reference block, status comment, and `Development Sync` checklist.
 
-Do not duplicate the same PR link repeatedly. First search or inspect recent task context when tools support it.
+Do not duplicate the same PR link repeatedly. `dev-sync` reads the task and
+comments first and skips backlink creation when the URL is already present.
 
-## Current Scaffold Behavior
+## Development Sync
 
-The current agent has not implemented ClickUp write tools yet. Until then, agents should surface the PR URL in their planned ClickUp update and clearly state that task linking is pending native ClickUp tool implementation.
+Dry-run example:
 
-## Example Task Comment Shape
+```bash
+clickup-agent run dev-sync \
+  --dry-run \
+  --task-id abc \
+  --branch feature/task \
+  --pr-url https://github.com/owner/repo/pull/123 \
+  --pr-title "Ship feature" \
+  --pr-number 123 \
+  --pr-state open
+```
+
+Managed ClickUp description block:
 
 ```text
-Development reference:
-- PR: <title> (#<number>)
+--- Development reference (dev-sync; auto-managed, edits will be overwritten) ---
+- PR: <title> (#<number>) - <state>
 - URL: <url>
-- Branch: <headRefName> -> <baseRefName>
+- Branch: <head> -> <base>
+- Latest commit: <sha> <subject>
+- Last sync: <iso8601>
+--- end dev-sync ---
 ```
+
+Managed status comments begin with `[dev-sync] GitHub development state`.
 
 ## Safety
 
 - Link only PRs discovered from the current branch or explicitly provided by the user.
 - Never expose tokens from `gh`, env files, or MCP config.
 - If the repo has no GitHub remote or `gh` is unauthenticated, report that PR discovery is unavailable.
+- ClickUp-side markers are visible text, not HTML comments.

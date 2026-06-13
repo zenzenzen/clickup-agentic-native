@@ -19,6 +19,7 @@ from mcp.server.fastmcp import FastMCP
 
 from . import __version__
 from .config import config_status
+from .devlinks import inspect_dev_pr
 from .registry import load_catalog
 from .toolchains import ToolchainError, ToolchainRunner
 
@@ -122,6 +123,8 @@ def create_server() -> FastMCP:
                 "clickup-agent run create-checklist-item",
                 "clickup-agent run check-item",
                 "clickup-agent run sync-checklist",
+                "clickup-agent run dev-sync",
+                "clickup-agent dev pr",
                 "clickup-agent run subtasks",
                 "clickup-agent run tags",
                 "clickup-agent run timer",
@@ -144,6 +147,11 @@ def create_server() -> FastMCP:
     ) -> dict[str, Any]:
         """Run any generated ClickUp operation by operation id or tool name. Defaults to dry-run."""
         return _run_mcp_toolchain(operation, payload or {}, live=live)
+
+    @server.tool()
+    def clickup_agent_dev_pr(timeout: float = 10.0, repo: str | None = None) -> dict[str, Any]:
+        """Inspect the current branch's GitHub PR. Read-only."""
+        return inspect_dev_pr(cwd=repo, timeout=timeout).to_dict()
 
     @server.tool()
     def clickup_agent_search(
@@ -641,6 +649,66 @@ def create_server() -> FastMCP:
                 tags=tags,
                 billable=billable,
                 assignee=assignee,
+            ),
+            live=live,
+        )
+
+    @server.tool()
+    def clickup_agent_dev_sync(
+        task_id: str,
+        repo: str | None = None,
+        branch: str | None = None,
+        latest_commit: str | None = None,
+        pr_url: str | None = None,
+        pr_title: str | None = None,
+        pr_number: int | str | None = None,
+        pr_branch: str | None = None,
+        pr_base: str | None = None,
+        pr_state: str | None = None,
+        name: str | None = None,
+        status: str | None = None,
+        priority: int | None = None,
+        description: str | None = None,
+        markdown_content: str | None = None,
+        comment: str | None = None,
+        pr_summary: bool | None = None,
+        checklist: str | None = None,
+        add_items: list[str] | None = None,
+        check_items: list[str] | None = None,
+        backlink_mode: str | None = None,
+        no_backlink: bool | None = None,
+        custom_task_ids: bool | None = None,
+        team_id: str | None = None,
+        live: bool = False,
+    ) -> dict[str, Any]:
+        """Sync GitHub development state into a ClickUp task. Defaults to dry-run."""
+        return _run_mcp_toolchain(
+            "dev-sync",
+            _payload_without_none(
+                task_id=task_id,
+                repo=repo,
+                branch=branch,
+                latest_commit=latest_commit,
+                pr_url=pr_url,
+                pr_title=pr_title,
+                pr_number=pr_number,
+                pr_branch=pr_branch,
+                pr_base=pr_base,
+                pr_state=pr_state,
+                name=name,
+                status=status,
+                priority=priority,
+                description=description,
+                markdown_content=markdown_content,
+                comment=comment,
+                pr_summary=pr_summary,
+                checklist=checklist,
+                add_items=add_items,
+                check_items=check_items,
+                backlink_mode=backlink_mode,
+                no_backlink=no_backlink,
+                custom_task_ids=custom_task_ids,
+                team_id=team_id,
             ),
             live=live,
         )
