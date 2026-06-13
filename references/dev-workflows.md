@@ -45,3 +45,29 @@ ClickUp markdown normalization.
 Automatic extraction from PR review threads is out of scope for this version.
 Agents should summarize the decision, pivot, or key conversation and append it
 explicitly with `decision-log`.
+
+## PR Body Sync
+
+`dev-sync --mode clickup-to-github` writes only a managed block in the GitHub PR
+body. It never closes, merges, reopens, or otherwise changes PR lifecycle state.
+
+```bash
+clickup-agent run dev-sync \
+  --dry-run \
+  --task-id abc \
+  --mode clickup-to-github \
+  --pr-url https://github.com/owner/repo/pull/123
+```
+
+The GitHub-managed block is bounded by HTML comments because GitHub preserves
+them:
+
+```text
+<!-- clickup-agent:dev-sync:start -->
+...
+<!-- clickup-agent:dev-sync:end -->
+```
+
+The same command defaults to `--mode github-to-clickup`; use `--mode
+bidirectional` when both ClickUp and GitHub surfaces should be updated in one
+dry-run/live envelope.

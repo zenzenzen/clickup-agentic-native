@@ -127,6 +127,7 @@ def test_mcp_write_toolchains_default_to_dry_run() -> None:
                 "branch": "feature/task",
                 "pr_url": "https://github.com/acme/repo/pull/12",
                 "pr_number": 12,
+                "mode": "bidirectional",
             },
             "GetTask",
         ),

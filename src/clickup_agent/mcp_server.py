@@ -657,6 +657,7 @@ def create_server() -> FastMCP:
     def clickup_agent_dev_sync(
         task_id: str,
         repo: str | None = None,
+        mode: str | None = None,
         branch: str | None = None,
         latest_commit: str | None = None,
         pr_url: str | None = None,
@@ -677,6 +678,7 @@ def create_server() -> FastMCP:
         check_items: list[str] | None = None,
         backlink_mode: str | None = None,
         no_backlink: bool | None = None,
+        pr_title_prefix: str | None = None,
         custom_task_ids: bool | None = None,
         team_id: str | None = None,
         live: bool = False,
@@ -687,6 +689,7 @@ def create_server() -> FastMCP:
             _payload_without_none(
                 task_id=task_id,
                 repo=repo,
+                mode=mode,
                 branch=branch,
                 latest_commit=latest_commit,
                 pr_url=pr_url,
@@ -707,6 +710,7 @@ def create_server() -> FastMCP:
                 check_items=check_items,
                 backlink_mode=backlink_mode,
                 no_backlink=no_backlink,
+                pr_title_prefix=pr_title_prefix,
                 custom_task_ids=custom_task_ids,
                 team_id=team_id,
             ),

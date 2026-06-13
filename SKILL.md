@@ -76,6 +76,7 @@ clickup-agent run task-statuses --dry-run --task-id abc
 clickup-agent run create-checklist --dry-run --task-id abc --name "Smoke checklist" --items checklist.json --resolved
 clickup-agent run sync-checklist --dry-run --task-id abc --name "Smoke checklist" --items checklist.json --resolve-all
 clickup-agent run dev-sync --dry-run --task-id abc --branch feature/demo --pr-url https://github.com/org/repo/pull/1
+clickup-agent run dev-sync --dry-run --task-id abc --mode clickup-to-github --pr-url https://github.com/org/repo/pull/1
 clickup-agent run work-log --dry-run --task-id abc --add-item "Implement change"
 clickup-agent run decision-log --dry-run --task-id abc --decision "Switched X to Y"
 clickup-agent run CreateChecklist --dry-run --task-id abc --name "Smoke generated op"
@@ -94,7 +95,9 @@ clickup-agent run dev-sync --dry-run --task-id <task-id> --branch <branch> --pr-
 Only add `--live` after the user explicitly wants ClickUp mutations. `dev-sync`
 reads the task and task comments first, avoids duplicate PR backlinks, updates
 only its visible `[dev-sync]` comment/description block, and manages the
-`Development Sync` checklist by item name.
+`Development Sync` checklist by item name. Use `--mode clickup-to-github` to
+upsert only the managed PR-body block, and `--mode bidirectional` to compose
+both directions. Never use ClickUp state to close, merge, or reopen PRs.
 
 ## Second-Brain Work Journal
 

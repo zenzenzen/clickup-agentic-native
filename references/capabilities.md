@@ -121,7 +121,7 @@ Agents can call generated operations directly through `clickup-agent run <operat
 - `subtasks`: subtask retrieval using `GetTask`
 - `tags`: add or remove task tags using `AddTagToTask` and `RemoveTagFromTask`
 - `timer`: current, start, and stop timer actions using time-entry operations
-- `dev-sync`: GitHub branch/PR state sync using `GetTask`, `GetTaskComments`, task/comment updates, and non-destructive checklist item convergence
+- `dev-sync`: GitHub branch/PR state sync using `GetTask`, `GetTaskComments`, task/comment updates, non-destructive checklist item convergence, and optional managed GitHub PR-body updates via `--mode clickup-to-github|bidirectional`
 - `work-log`: mutable `Action Items` or `Verification` checklist state using non-destructive checklist item convergence
 - `decision-log`: append-only decision record comments using visible `[dev-sync:decision]` markers
 
