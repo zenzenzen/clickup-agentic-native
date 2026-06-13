@@ -14,6 +14,7 @@ from . import __version__
 from .client import ClickUpApiError, ClickUpClient
 from .connect_cmd import run_connect
 from .config import ConfigError, config_status, default_env_file, load_config
+from .devlinks import inspect_dev_pr
 from .registry import ToolOperation, load_catalog
 from .setup_cmd import run_setup
 from .toolchains import ToolchainError, run_toolchain
@@ -121,6 +122,18 @@ def _operation_row(operation: ToolOperation) -> dict[str, object]:
     }
 
 
+def _operation_matches_query(operation: ToolOperation, terms: list[str]) -> bool:
+    haystack = " ".join(
+        [
+            operation.name,
+            operation.operation_id,
+            operation.summary,
+            *operation.tags,
+        ]
+    ).casefold()
+    return all(term.casefold() in haystack for term in terms)
+
+
 def _cmd_tools_list(args: argparse.Namespace) -> int:
     catalog = load_catalog()
     rows = [_operation_row(operation) for operation in catalog.list_operations(tag=args.tag, write_only=args.write_only)]
@@ -144,6 +157,41 @@ def _cmd_tools_list(args: argparse.Namespace) -> int:
             ("path", "Path"),
             ("tags", "Tags"),
             ("write", "Write"),
+            ("summary", "Summary"),
+        ],
+    )
+    return 0
+
+
+def _cmd_tools_find(args: argparse.Namespace) -> int:
+    terms = [str(item).strip() for item in args.query if str(item).strip()]
+    catalog = load_catalog()
+    rows = [
+        _operation_row(operation)
+        for operation in catalog.operations
+        if _operation_matches_query(operation, terms)
+    ]
+    if args.format == "json":
+        _print_json(
+            {
+                "kind": "generated_openapi_operations_search",
+                "source": catalog.source,
+                "source_version": catalog.source_version,
+                "query": " ".join(terms),
+                "count": len(rows),
+                "tools": rows,
+            }
+        )
+        return 0
+    print(f"Generated OpenAPI operations matching: {' '.join(terms)}")
+    _print_table(
+        rows,
+        [
+            ("name", "Name"),
+            ("operation_id", "Operation"),
+            ("method", "Method"),
+            ("path", "Path"),
+            ("tags", "Tags"),
             ("summary", "Summary"),
         ],
     )
@@ -191,6 +239,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
     except ToolchainError as exc:
         print(str(exc))
         return 2
+    _print_json(result.to_dict())
+    return 0
+
+
+def _cmd_dev_pr(args: argparse.Namespace) -> int:
+    result = inspect_dev_pr(timeout=args.timeout)
     _print_json(result.to_dict())
     return 0
 
@@ -262,6 +316,10 @@ def build_parser() -> argparse.ArgumentParser:
     tools_list.add_argument("--tag", help="Filter operations by an OpenAPI tag such as Tasks.")
     tools_list.add_argument("--write-only", action="store_true", help="Only show operations that can mutate ClickUp.")
     tools_list.set_defaults(func=_cmd_tools_list)
+    tools_find = tools_subcommands.add_parser("find", help="Find generated ClickUp operations by free text.")
+    tools_find.add_argument("query", nargs="+", help="Case-insensitive query terms.")
+    tools_find.add_argument("--format", choices=["table", "json"], default="table", help="Output format.")
+    tools_find.set_defaults(func=_cmd_tools_find)
 
     hotkeys = subcommands.add_parser("hotkeys", help="Inspect future hotkey toolchains.")
     hotkeys_subcommands = hotkeys.add_subparsers(dest="hotkeys_command", required=True)
@@ -273,6 +331,12 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("name", help="Hotkey or toolchain name.")
     run.add_argument("tool_args", nargs=argparse.REMAINDER, help="Toolchain-specific flags.")
     run.set_defaults(func=_cmd_run)
+
+    dev = subcommands.add_parser("dev", help="Read-only development helpers.")
+    dev_subcommands = dev.add_subparsers(dest="dev_command", required=True)
+    dev_pr = dev_subcommands.add_parser("pr", help="Inspect the current branch GitHub PR.")
+    dev_pr.add_argument("--timeout", type=float, default=10.0, help="gh subprocess timeout in seconds.")
+    dev_pr.set_defaults(func=_cmd_dev_pr)
 
     return parser
 
