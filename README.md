@@ -94,6 +94,11 @@ clickup-agent run hotfix-doc --dry-run --list-id 456 --title "Fix docs" --pr-url
 Bundled macro movesets include `dev-sync`, branch audit with `dev audit`, and
 `hotfix-doc`. Use `clickup-agent onboard` for trigger phrases and examples.
 
+A reference GitHub Actions workflow is available at
+`examples/github-actions-dev-sync.yml`. Copy it into `.github/workflows/` when a
+repository should run `dev-sync --live --mode github-to-clickup` from PR events
+using a `CLICKUP_API_KEY` repository secret.
+
 Checklist item files can mix plain item names and item objects:
 
 ```json

@@ -48,6 +48,7 @@ The canonical local secret file is `$HOME/.config/clickup-agent/.env`. That is t
 - **Back-link development work**: read `references/development-links.md`; if a GitHub PR already exists for the current branch, include its URL when updating the related ClickUp task.
 - **Reconcile merged branches into ClickUp**: run `clickup-agent dev audit` first, then use merged PR details with `dev-sync`; ask before reading commit history for backfill.
 - **Document a hotfix PR**: use `clickup-agent run hotfix-doc --dry-run`; add `--live` only when the documentation task should be created.
+- **Automate PR event sync**: copy `examples/github-actions-dev-sync.yml`; it runs the existing `dev-sync` engine from GitHub Actions.
 - **Keep the task as a second brain**: for any non-trivial change, start or update `work-log` checklists, check off completed work and verification, and append decisions with `decision-log`.
 - **Install this skill for Codex discovery**: run `bash scripts/install-skill.sh`.
 
@@ -98,6 +99,11 @@ env setup, doctor checks, curated toolchains, and macro movesets.
 | "sync this task", "update the task for this branch", "link the PR" | `dev-sync` |
 | "audit my branches", "which branches are merged", "reconcile ClickUp with git" | `dev audit` then `dev-sync` |
 | "log this hotfix", "document PR #N as a hotfix task" | `hotfix-doc` |
+
+For PR event automation, copy `examples/github-actions-dev-sync.yml` into a
+repository's `.github/workflows/` directory and configure the `CLICKUP_API_KEY`
+repository secret. ClickUp-to-local webhooks are out of scope for this local
+CLI; use `dev audit` to reconcile ClickUp-side drift.
 
 ## Sync A Task With Its Branch PR
 
