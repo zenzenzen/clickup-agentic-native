@@ -62,8 +62,10 @@ bash -n scripts/install.sh
 bash -n scripts/install-skill.sh
 clickup-agent --version
 clickup-agent tools list --format json
+clickup-agent tools find task comments
 clickup-agent hotkeys list
 clickup-agent doctor || true
+clickup-agent dev pr
 clickup-agent run create-task --dry-run --list-id 123 --name "Smoke test"
 clickup-agent run list-hierarchy --dry-run --team-id 123
 clickup-agent run update-task --dry-run --task-id abc --name "Smoke rename"
@@ -72,5 +74,21 @@ clickup-agent run get-task --dry-run --task-id abc --summary
 clickup-agent run task-statuses --dry-run --task-id abc
 clickup-agent run create-checklist --dry-run --task-id abc --name "Smoke checklist" --items checklist.json --resolved
 clickup-agent run sync-checklist --dry-run --task-id abc --name "Smoke checklist" --items checklist.json --resolve-all
+clickup-agent run dev-sync --dry-run --task-id abc --branch feature/demo --pr-url https://github.com/org/repo/pull/1
 clickup-agent run CreateChecklist --dry-run --task-id abc --name "Smoke generated op"
 ```
+
+## Sync A Task With Its Branch PR
+
+When the user asks to sync this task, update the task for this branch, or link
+the PR, use the native workflow:
+
+```bash
+clickup-agent dev pr
+clickup-agent run dev-sync --dry-run --task-id <task-id> --branch <branch> --pr-url <url> --pr-title <title> --pr-number <n> --pr-state <state>
+```
+
+Only add `--live` after the user explicitly wants ClickUp mutations. `dev-sync`
+reads the task and task comments first, avoids duplicate PR backlinks, updates
+only its visible `[dev-sync]` comment/description block, and manages the
+`Development Sync` checklist by item name.

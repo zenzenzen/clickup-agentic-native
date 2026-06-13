@@ -15,6 +15,15 @@ from typing import Any, Callable
 
 from .client import ClickUpApiError, ClickUpClient
 from .config import ConfigError, load_workspace_id
+from .devsync import (
+    DEVELOPMENT_SYNC_CHECKLIST,
+    ClickUpTaskContext,
+    DevSyncInput,
+    GitHubPrContext,
+    GitRepositoryContext,
+    build_dev_sync_plan,
+)
+from .markers import upsert_description_block
 from .registry import ToolCatalog, ToolOperation, load_catalog, normalize_tool_name
 from .requests import OperationInputError, OperationRequest, build_operation_request
 from .validation import (
@@ -118,6 +127,7 @@ class ToolchainRunner:
             "create-checklist-item": _run_create_checklist_item,
             "check-item": _run_check_item,
             "sync-checklist": _run_sync_checklist,
+            "dev-sync": _run_dev_sync,
             "subtasks": _run_subtasks,
             "tags": _run_tags,
             "timer": _run_timer,
@@ -278,6 +288,13 @@ def _local_wrapper_metadata(name: str) -> dict[str, Any]:
             "name": "comments",
             "summary": "List or add task comments.",
             "operation_ids": ["GetTaskComments", "CreateTaskComment"],
+            "is_write": True,
+        }
+    if name == "dev-sync":
+        return {
+            "name": "dev-sync",
+            "summary": "Sync GitHub branch/PR development state into a ClickUp task.",
+            "operation_ids": ["GetTask", "GetTaskComments", "UpdateTask", "CreateTaskComment", "UpdateComment", "CreateChecklist", "CreateChecklistItem", "EditChecklistItem"],
             "is_write": True,
         }
     return {"name": name}
@@ -1700,6 +1717,196 @@ def _configure_sync_checklist(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--resolve-all", action="store_true", default=None)
     parser.add_argument("--custom-task-ids", action="store_true", default=None)
     parser.add_argument("--team-id")
+
+
+def _run_dev_sync(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    """Plan or apply GitHub-to-ClickUp development sync."""
+
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_dev_sync)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["task_id"], context="dev-sync")
+    task_id = str(payload.pop("task_id"))
+    base_payload = {
+        "task_id": task_id,
+        **{key: payload.pop(key) for key in ("custom_task_ids", "team_id") if key in payload},
+    }
+    task_lookup_payload = {**base_payload, "include_markdown_description": True}
+    inputs = _dev_sync_input(task_id, payload)
+
+    operations: list[dict[str, Any]] = []
+    task_operation, task_response = _execute_operation(catalog, "GetTask", task_lookup_payload, dry_run=options.dry_run, client=client)
+    operations.append(task_operation)
+    comments_operation, comments_response = _execute_operation(
+        catalog,
+        "GetTaskComments",
+        base_payload,
+        dry_run=options.dry_run,
+        client=client,
+    )
+    operations.append(comments_operation)
+    task_context = ClickUpTaskContext(
+        task_id=task_id,
+        task=task_response if isinstance(task_response, dict) else {},
+        comments=_comments_from_response(comments_response),
+    )
+    plan = build_dev_sync_plan(inputs, task_context)
+
+    if plan.task_updates:
+        operation, _ = _execute_operation(
+            catalog,
+            "UpdateTask",
+            {**base_payload, "body": plan.task_updates},
+            dry_run=options.dry_run,
+            client=client,
+        )
+        operations.append(operation)
+
+    if plan.backlink_needed:
+        if plan.backlink_mode == "description":
+            existing_description = task_context.task.get("description") or task_context.task.get("markdown_description") or ""
+            operation, _ = _execute_operation(
+                catalog,
+                "UpdateTask",
+                {**base_payload, "body": {"description": upsert_description_block(str(existing_description), plan.description_block)}},
+                dry_run=options.dry_run,
+                client=client,
+            )
+            operations.append(operation)
+        else:
+            operation, _ = _execute_operation(
+                catalog,
+                "CreateTaskComment",
+                {**base_payload, "body": _comment_body(plan.description_block)},
+                dry_run=options.dry_run,
+                client=client,
+            )
+            operations.append(operation)
+
+    for comment_text in plan.comment_texts:
+        operation, _ = _execute_operation(
+            catalog,
+            "CreateTaskComment",
+            {**base_payload, "body": _comment_body(comment_text)},
+            dry_run=options.dry_run,
+            client=client,
+        )
+        operations.append(operation)
+
+    if plan.status_comment is not None and plan.status_comment.get("id") is not None:
+        operation, _ = _execute_operation(
+            catalog,
+            "UpdateComment",
+            {
+                "comment_id": plan.status_comment["id"],
+                "body": {
+                    "comment_text": plan.status_comment_text,
+                    "assignee": 0,
+                    "resolved": False,
+                },
+            },
+            dry_run=options.dry_run,
+            client=client,
+        )
+        operations.append(operation)
+    else:
+        operation, _ = _execute_operation(
+            catalog,
+            "CreateTaskComment",
+            {**base_payload, "body": _comment_body(plan.status_comment_text)},
+            dry_run=options.dry_run,
+            client=client,
+        )
+        operations.append(operation)
+
+    checklist = _find_checklist_by_name(task_context.task, plan.checklist_name)
+    if checklist is None:
+        create_operation, create_response = _execute_operation(
+            catalog,
+            "CreateChecklist",
+            {**base_payload, "body": {"name": plan.checklist_name}},
+            dry_run=options.dry_run,
+            client=client,
+        )
+        operations.append(create_operation)
+        checklist = _extract_checklist(create_response) if not options.dry_run else {"id": "<created-checklist-id>", "items": []}
+    checklist_id = _id_from(checklist) or "<existing-or-created-checklist-id>"
+    if options.dry_run:
+        item_operations, _ = _create_checklist_items(catalog, checklist_id, list(plan.checklist_items), True, None)
+    else:
+        item_operations, _, _ = _sync_checklist_items(catalog, checklist_id, checklist or {"items": []}, list(plan.checklist_items), client)
+    operations.extend(item_operations)
+    return RunResult(options.name, options.dry_run, operations, plan.to_response())
+
+
+def _configure_dev_sync(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", required=False)
+    parser.add_argument("--repo")
+    parser.add_argument("--branch")
+    parser.add_argument("--latest-commit")
+    parser.add_argument("--pr-url")
+    parser.add_argument("--pr-title")
+    parser.add_argument("--pr-number")
+    parser.add_argument("--pr-branch")
+    parser.add_argument("--pr-base")
+    parser.add_argument("--pr-state")
+    parser.add_argument("--name")
+    parser.add_argument("--status")
+    parser.add_argument("--priority")
+    parser.add_argument("--description")
+    parser.add_argument("--markdown-content", dest="markdown_content")
+    parser.add_argument("--comment")
+    parser.add_argument("--pr-summary", action="store_true", default=None)
+    parser.add_argument("--checklist", default=None)
+    parser.add_argument("--add-item", dest="add_items", action="append")
+    parser.add_argument("--check-item", dest="check_items", action="append")
+    parser.add_argument("--backlink-mode", choices=["comment", "description"], default=None)
+    parser.add_argument("--no-backlink", action="store_true", default=None)
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
+
+
+def _dev_sync_input(task_id: str, payload: dict[str, Any]) -> DevSyncInput:
+    task_updates: dict[str, Any] = {}
+    for key in ("name", "status", "description", "markdown_content"):
+        if key in payload:
+            task_updates[key] = payload.pop(key)
+    if "priority" in payload:
+        task_updates["priority"] = _int(payload.pop("priority"), field="priority")
+    return DevSyncInput(
+        task_id=task_id,
+        repo=GitRepositoryContext(
+            branch=payload.pop("branch", None),
+            latest_commit=payload.pop("latest_commit", None),
+        ),
+        pr=GitHubPrContext(
+            url=payload.pop("pr_url", None),
+            title=payload.pop("pr_title", None),
+            number=payload.pop("pr_number", None),
+            branch=payload.pop("pr_branch", None),
+            base=payload.pop("pr_base", None),
+            state=payload.pop("pr_state", None),
+        ),
+        task_updates=task_updates,
+        comment=payload.pop("comment", None),
+        pr_summary=_bool(payload.pop("pr_summary"), field="pr_summary") if "pr_summary" in payload else False,
+        checklist_name=str(payload.pop("checklist", None) or DEVELOPMENT_SYNC_CHECKLIST),
+        add_items=tuple(str(item) for item in _csv_or_list(payload.pop("add_items", []))),
+        check_items=tuple(str(item) for item in _csv_or_list(payload.pop("check_items", []))),
+        backlink_mode=str(payload.pop("backlink_mode", None) or "comment"),
+        no_backlink=_bool(payload.pop("no_backlink"), field="no_backlink") if "no_backlink" in payload else False,
+    )
+
+
+def _comment_body(text: str) -> dict[str, Any]:
+    return {"comment_text": text, "notify_all": False}
+
+
+def _comments_from_response(response: Any) -> list[Any]:
+    if isinstance(response, dict) and isinstance(response.get("comments"), list):
+        return response["comments"]
+    if isinstance(response, list):
+        return response
+    return []
 
 
 def _parse_checklist_items(

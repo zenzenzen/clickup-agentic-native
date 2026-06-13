@@ -405,6 +405,124 @@ def test_comments_wrapper_lists_and_adds_task_comments() -> None:
     assert added.response == {"id": "c2", "comment_text": "Added"}
 
 
+def test_dev_sync_dry_run_plans_reads_backlink_status_comment_and_checklist(capsys) -> None:
+    assert (
+        main(
+            [
+                "run",
+                "dev-sync",
+                "--dry-run",
+                "--task-id",
+                "abc",
+                "--branch",
+                "feature/task",
+                "--pr-url",
+                "https://github.com/acme/repo/pull/12",
+                "--pr-title",
+                "Ship feature",
+                "--pr-number",
+                "12",
+                "--pr-state",
+                "open",
+                "--latest-commit",
+                "abc123 Fix bug",
+                "--comment",
+                "Implementation note",
+                "--check-item",
+                "Lint/type checks passed",
+            ]
+        )
+        == 0
+    )
+
+    payload = _json_output(capsys)
+    operation_ids = [operation["operation_id"] for operation in payload["operations"]]
+
+    assert payload["dry_run"] is True
+    assert operation_ids[:2] == ["GetTask", "GetTaskComments"]
+    assert "CreateTaskComment" in operation_ids
+    assert "CreateChecklistItem" in operation_ids
+    assert payload["response"]["task_id"] == "abc"
+    assert payload["response"]["branch"] == "feature/task"
+    assert payload["response"]["pr_state"] == "open"
+    assert payload["response"]["planned_updates"]["status_comment"] == "create"
+    assert payload["response"]["planned_updates"]["checklist"] == "Development Sync"
+    assert payload["response"]["duplicates_avoided"]["backlink"] is False
+
+
+def test_dev_sync_live_skips_existing_backlink_and_updates_sync_comment() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.method == "GET" and request.url.path == "/api/v2/task/abc":
+            return httpx.Response(
+                200,
+                json={
+                    "id": "abc",
+                    "description": "Existing https://github.com/acme/repo/pull/12",
+                    "checklists": [
+                        {
+                            "id": "chk",
+                            "name": "Development Sync",
+                            "items": [{"id": "item-1", "name": "Branch pushed", "resolved": False}],
+                        }
+                    ],
+                },
+            )
+        if request.method == "GET" and request.url.path == "/api/v2/task/abc/comment":
+            return httpx.Response(
+                200,
+                json={
+                    "comments": [
+                        {"id": "sync-cmt", "comment_text": "[dev-sync] GitHub development state - old"},
+                    ]
+                },
+            )
+        if request.method == "POST" and request.url.path == "/api/v2/checklist/chk/checklist_item":
+            body = json.loads(request.content)
+            return httpx.Response(200, json={"checklist_item": {"id": f"new-{len(requests)}", "name": body["name"]}})
+        return httpx.Response(200, json={"ok": True})
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    result = runner.run(
+        "dev-sync",
+        [
+            "--live",
+            "--task-id",
+            "abc",
+            "--branch",
+            "feature/task",
+            "--pr-url",
+            "https://github.com/acme/repo/pull/12",
+            "--pr-number",
+            "12",
+            "--pr-title",
+            "Ship feature",
+            "--pr-state",
+            "open",
+        ],
+    )
+
+    paths = [request.url.path for request in requests]
+    create_comment_requests = [
+        request
+        for request in requests
+        if request.method == "POST" and request.url.path == "/api/v2/task/abc/comment"
+    ]
+
+    assert "/api/v2/comment/sync-cmt" in paths
+    assert not create_comment_requests
+    assert result.response["duplicates_avoided"]["backlink"] is True
+    assert result.response["planned_updates"]["status_comment"] == "update"
+
+
 def test_comment_help_cross_references_comments_wrapper(capsys) -> None:
     assert main(["run", "comment", "--help"]) == 0
 
