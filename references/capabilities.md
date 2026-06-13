@@ -38,6 +38,8 @@ Read `../CONTEXT.md` for product intent and `../UBIQUITOUS_LANGUAGE.md` for cano
 - `clickup-agent run tags`
 - `clickup-agent run timer`
 - `clickup-agent run dev-sync`
+- `clickup-agent run work-log`
+- `clickup-agent run decision-log`
 - `clickup-agent run <generated operation name or ID>`
 - `scripts/install.sh` for env file, local install, and Cursor MCP config
 - `scripts/install-skill.sh` for Codex skill discovery
@@ -71,6 +73,8 @@ Read `../CONTEXT.md` for product intent and `../UBIQUITOUS_LANGUAGE.md` for cano
   - `clickup_agent_tags`
   - `clickup_agent_timer`
   - `clickup_agent_dev_sync`
+  - `clickup_agent_work_log`
+  - `clickup_agent_decision_log`
 
 ## CLI Command Shape
 
@@ -118,9 +122,12 @@ Agents can call generated operations directly through `clickup-agent run <operat
 - `tags`: add or remove task tags using `AddTagToTask` and `RemoveTagFromTask`
 - `timer`: current, start, and stop timer actions using time-entry operations
 - `dev-sync`: GitHub branch/PR state sync using `GetTask`, `GetTaskComments`, task/comment updates, and non-destructive checklist item convergence
+- `work-log`: mutable `Action Items` or `Verification` checklist state using non-destructive checklist item convergence
+- `decision-log`: append-only decision record comments using visible `[dev-sync:decision]` markers
 
 ## Still Planned
 
+- Automatic extraction of decisions from PR review threads via `dev-sync --capture-decisions`
 - Full comments coverage for list/view/threaded comments
 - Docs, chat, attachments, webhooks, admin workflows, and broader hierarchy/entity resolution
 

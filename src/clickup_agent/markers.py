@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 
 DESCRIPTION_START = "--- Development reference (dev-sync; auto-managed, edits will be overwritten) ---"
 DESCRIPTION_END = "--- end dev-sync ---"
 STATUS_COMMENT_PREFIX = "[dev-sync] GitHub development state"
+DECISION_COMMENT_PREFIX = "[dev-sync:decision]"
 
 
 def render_description_block(
@@ -88,6 +90,43 @@ def has_pr_backlink(description: str | None, comments: list[Any], pr_url: str | 
     if not pr_url:
         return False
     return pr_url in str(description or "") or any(comment_contains_url(comment, pr_url) for comment in comments)
+
+
+def render_decision_comment(
+    *,
+    decision: str,
+    context: str | None = None,
+    alternatives: str | None = None,
+    source: str | None = None,
+    pr_url: str | None = None,
+    commit: str | None = None,
+    timestamp: str | None = None,
+) -> str:
+    """Render an append-only decision journal comment."""
+    stamp = timestamp or datetime.now(UTC).date().isoformat()
+    title = _decision_title(decision)
+    lines = [
+        f"{DECISION_COMMENT_PREFIX} {stamp} - {title}",
+        f"Decision: {decision}",
+    ]
+    if context:
+        lines.append(f"Context: {context}")
+    if alternatives:
+        lines.append(f"Alternatives considered: {alternatives}")
+    source_label = source or "conversation"
+    links = " ".join(item for item in (pr_url, commit) if item)
+    if links:
+        lines.append(f"Source: {source_label} · Links: {links}")
+    else:
+        lines.append(f"Source: {source_label}")
+    return "\n".join(lines)
+
+
+def _decision_title(decision: str) -> str:
+    cleaned = " ".join(decision.strip().split())
+    if len(cleaned) <= 72:
+        return cleaned
+    return cleaned[:69].rstrip() + "..."
 
 
 def _comment_text(comment: dict[str, Any]) -> str:

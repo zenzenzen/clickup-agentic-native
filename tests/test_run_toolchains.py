@@ -523,6 +523,79 @@ def test_dev_sync_live_skips_existing_backlink_and_updates_sync_comment() -> Non
     assert result.response["planned_updates"]["status_comment"] == "update"
 
 
+def test_work_log_dry_run_uses_named_checklist_and_resolves_checked_items(capsys) -> None:
+    assert (
+        main(
+            [
+                "run",
+                "work-log",
+                "--dry-run",
+                "--task-id",
+                "abc",
+                "--checklist",
+                "verification",
+                "--add-item",
+                "Run pytest",
+                "--check",
+                "Run pytest",
+            ]
+        )
+        == 0
+    )
+
+    payload = _json_output(capsys)
+    operation_ids = [operation["operation_id"] for operation in payload["operations"]]
+
+    assert operation_ids[0] == "GetTask"
+    assert "CreateChecklistItem" in operation_ids
+    assert "EditChecklistItem" in operation_ids
+    assert payload["response"]["checklist"] == "Verification"
+    assert payload["response"]["items"] == [{"name": "Run pytest", "resolved": True}]
+
+
+def test_decision_log_appends_one_comment_and_never_updates_existing_comments() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"id": "comment-1"})
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    result = runner.run(
+        "decision-log",
+        [
+            "--live",
+            "--task-id",
+            "abc",
+            "--decision",
+            "Switched X to Y",
+            "--context",
+            "Y matches the existing wrapper model.",
+            "--alternatives",
+            "Keep X",
+            "--source",
+            "conversation",
+            "--pr-url",
+            "https://github.com/acme/repo/pull/12",
+            "--commit",
+            "abc123",
+        ],
+    )
+
+    assert [request.method for request in requests] == ["POST"]
+    assert requests[0].url.path == "/api/v2/task/abc/comment"
+    body = json.loads(requests[0].content)
+    assert body["comment_text"].startswith("[dev-sync:decision]")
+    assert "Decision: Switched X to Y" in body["comment_text"]
+    assert result.response["append_only"] is True
+
+
 def test_comment_help_cross_references_comments_wrapper(capsys) -> None:
     assert main(["run", "comment", "--help"]) == 0
 

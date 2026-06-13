@@ -45,11 +45,12 @@ The canonical local secret file is `$HOME/.config/clickup-agent/.env`. That is t
 - **Use a curated wrapper**: run `clickup-agent hotkeys list`, then `clickup-agent run <kebab-case-wrapper> --dry-run ...`. Exact PascalCase operation IDs select generated operations; kebab-case names select curated wrappers when available.
 - **Work with task descriptions**: prefer `markdown_content`/`--markdown-content` for rich descriptions, and expect ClickUp to normalize rendered text when task data is fetched later.
 - **Back-link development work**: read `references/development-links.md`; if a GitHub PR already exists for the current branch, include its URL when updating the related ClickUp task.
+- **Keep the task as a second brain**: for any non-trivial change, start or update `work-log` checklists, check off completed work and verification, and append decisions with `decision-log`.
 - **Install this skill for Codex discovery**: run `bash scripts/install-skill.sh`.
 
 ## Current Truth
 
-Implemented today: Python 3.12 CLI, generated ClickUp V2 tool catalog, `tools list` for generated OpenAPI operations, `hotkeys list` for curated wrappers, task/search/comment/checklist/timer `run` wrappers, compact task fetches, task status discovery, checklist sync, generated-operation fallback through `clickup-agent run <operation-id-or-name>`, `doctor --live-auth`, MCP bootstrap/status tools, direct MCP wrappers for the implemented run wrappers, `clickup_agent_run_operation`, Cursor MCP config support, and skill installation.
+Implemented today: Python 3.12 CLI, generated ClickUp V2 tool catalog, `tools list` for generated OpenAPI operations, `hotkeys list` for curated wrappers, task/search/comment/checklist/timer `run` wrappers, compact task fetches, task status discovery, checklist sync, dev sync, work-log and decision-log second-brain wrappers, generated-operation fallback through `clickup-agent run <operation-id-or-name>`, `doctor --live-auth`, MCP bootstrap/status tools, direct MCP wrappers for the implemented run wrappers, `clickup_agent_run_operation`, Cursor MCP config support, and skill installation.
 
 Planned: broader ClickUp API workflows for docs, users, guests, user groups, lists, attachments, webhooks, admin surfaces, richer entity resolution, and expanded curated wrappers.
 
@@ -75,6 +76,8 @@ clickup-agent run task-statuses --dry-run --task-id abc
 clickup-agent run create-checklist --dry-run --task-id abc --name "Smoke checklist" --items checklist.json --resolved
 clickup-agent run sync-checklist --dry-run --task-id abc --name "Smoke checklist" --items checklist.json --resolve-all
 clickup-agent run dev-sync --dry-run --task-id abc --branch feature/demo --pr-url https://github.com/org/repo/pull/1
+clickup-agent run work-log --dry-run --task-id abc --add-item "Implement change"
+clickup-agent run decision-log --dry-run --task-id abc --decision "Switched X to Y"
 clickup-agent run CreateChecklist --dry-run --task-id abc --name "Smoke generated op"
 ```
 
@@ -92,3 +95,20 @@ Only add `--live` after the user explicitly wants ClickUp mutations. `dev-sync`
 reads the task and task comments first, avoids duplicate PR backlinks, updates
 only its visible `[dev-sync]` comment/description block, and manages the
 `Development Sync` checklist by item name.
+
+## Second-Brain Work Journal
+
+For any major or minor complicated change, use the task as the durable work
+record without waiting for the operator to ask:
+
+```bash
+clickup-agent run work-log --dry-run --task-id <task-id> --add-item "Implement change"
+clickup-agent run work-log --dry-run --task-id <task-id> --check "Implement change"
+clickup-agent run work-log --dry-run --task-id <task-id> --checklist verification --add-item "Run focused tests"
+clickup-agent run decision-log --dry-run --task-id <task-id> --decision "Switched X to Y" --context "Why the direction changed"
+```
+
+`work-log` is mutable checklist state: `Action Items` and `Verification`.
+`decision-log` is append-only journal state: one new comment per decision,
+pivot, or key conversation. Automatic extraction from PR review threads is out
+of scope for now; the agent should summarize and append the decision itself.

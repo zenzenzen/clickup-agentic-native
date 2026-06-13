@@ -57,6 +57,8 @@ def test_mcp_registers_direct_clickup_tools() -> None:
         "clickup_agent_timer",
         "clickup_agent_dev_pr",
         "clickup_agent_dev_sync",
+        "clickup_agent_work_log",
+        "clickup_agent_decision_log",
     } <= names
 
 
@@ -128,6 +130,8 @@ def test_mcp_write_toolchains_default_to_dry_run() -> None:
             },
             "GetTask",
         ),
+        ("work-log", {"task_id": "abc", "add_items": ["Run pytest"]}, "GetTask"),
+        ("decision-log", {"task_id": "abc", "decision": "Switched X to Y"}, "CreateTaskComment"),
     ]
 
     for name, payload, operation_id in cases:
