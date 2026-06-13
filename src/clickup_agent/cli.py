@@ -14,7 +14,7 @@ from . import __version__
 from .client import ClickUpApiError, ClickUpClient
 from .connect_cmd import run_connect
 from .config import ConfigError, config_status, default_env_file, load_config
-from .devlinks import inspect_dev_pr
+from .devlinks import inspect_dev_audit, inspect_dev_pr
 from .registry import ToolOperation, load_catalog
 from .setup_cmd import run_setup
 from .toolchains import ToolchainError, run_toolchain
@@ -249,6 +249,16 @@ def _cmd_dev_pr(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_dev_audit(args: argparse.Namespace) -> int:
+    try:
+        entries = inspect_dev_audit(timeout=args.timeout, task_id_pattern=args.task_id_pattern)
+    except RuntimeError as exc:
+        print(str(exc))
+        return 2
+    _print_json([entry.to_dict() for entry in entries])
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the command parser shared by console script and module entrypoint."""
     parser = argparse.ArgumentParser(prog="clickup-agent")
@@ -337,6 +347,10 @@ def build_parser() -> argparse.ArgumentParser:
     dev_pr = dev_subcommands.add_parser("pr", help="Inspect the current branch GitHub PR.")
     dev_pr.add_argument("--timeout", type=float, default=10.0, help="gh subprocess timeout in seconds.")
     dev_pr.set_defaults(func=_cmd_dev_pr)
+    dev_audit = dev_subcommands.add_parser("audit", help="Audit local branches against GitHub PR state.")
+    dev_audit.add_argument("--timeout", type=float, default=10.0, help="git/gh subprocess timeout in seconds.")
+    dev_audit.add_argument("--task-id-pattern", default=None, help="Regex used to guess a ClickUp task id from branch names.")
+    dev_audit.set_defaults(func=_cmd_dev_audit)
 
     return parser
 

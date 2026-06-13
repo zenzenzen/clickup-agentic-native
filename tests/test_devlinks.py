@@ -6,7 +6,7 @@ import subprocess
 import pytest
 
 from clickup_agent.cli import main
-from clickup_agent.devlinks import DevPrState, inspect_dev_pr, upsert_pr_body_block
+from clickup_agent.devlinks import DevPrState, guess_clickup_task_id, inspect_dev_pr, upsert_pr_body_block
 
 
 def test_dev_pr_found_from_cli(monkeypatch, capsys) -> None:
@@ -126,3 +126,86 @@ def test_pr_body_block_upsert_preserves_human_content() -> None:
     updated = upsert_pr_body_block(body, block)
 
     assert updated == "Intro\n\n<!-- clickup-agent:dev-sync:start -->\nnew\n<!-- clickup-agent:dev-sync:end -->\n\nFooter"
+
+
+@pytest.mark.parametrize(
+    ("branch", "expected"),
+    [
+        ("feature/86dzdnmcr-dev-sync", "86dzdnmcr"),
+        ("hotfix/CU-123-doc-fix", "CU-123"),
+        ("feature/no-task-id", None),
+    ],
+)
+def test_guess_clickup_task_id_default_pattern(branch: str, expected: str | None) -> None:
+    assert guess_clickup_task_id(branch) == expected
+
+
+def test_guess_clickup_task_id_custom_pattern() -> None:
+    assert guess_clickup_task_id("feature/task-123-ship", pattern=r"task-(\d+)") == "123"
+
+
+def test_dev_audit_joins_branches_with_batched_pr_list(monkeypatch, capsys) -> None:
+    commands: list[list[str]] = []
+
+    def fake_run(command, *, cwd=None, timeout=None, capture_output=True, text=True, check=False):
+        commands.append(command)
+        if command[:2] == ["git", "for-each-ref"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout="feature/86dzdnmcr-dev-sync\tahead 2, behind 1\nmain\t\n",
+                stderr="",
+            )
+        if command[:3] == ["gh", "pr", "list"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=json.dumps(
+                    [
+                        {
+                            "number": 42,
+                            "title": "Dev sync",
+                            "url": "https://github.com/acme/repo/pull/42",
+                            "headRefName": "feature/86dzdnmcr-dev-sync",
+                            "state": "MERGED",
+                            "mergedAt": "2026-06-13T01:02:03Z",
+                        }
+                    ]
+                ),
+                stderr="",
+            )
+        raise AssertionError(command)
+
+    monkeypatch.setattr("clickup_agent.devlinks.subprocess.run", fake_run)
+
+    assert main(["dev", "audit"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload == [
+        {
+            "branch": "feature/86dzdnmcr-dev-sync",
+            "pr_number": 42,
+            "pr_url": "https://github.com/acme/repo/pull/42",
+            "pr_title": "Dev sync",
+            "state": "MERGED",
+            "merged": True,
+            "merged_at": "2026-06-13T01:02:03Z",
+            "clickup_task_id_guess": "86dzdnmcr",
+            "ahead": 2,
+            "behind": 1,
+        },
+        {
+            "branch": "main",
+            "pr_number": None,
+            "pr_url": None,
+            "pr_title": None,
+            "state": "no_pr",
+            "merged": False,
+            "merged_at": None,
+            "clickup_task_id_guess": None,
+            "ahead": None,
+            "behind": None,
+        },
+    ]
+    assert sum(command[:3] == ["gh", "pr", "list"] for command in commands) == 1
