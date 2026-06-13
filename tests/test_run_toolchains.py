@@ -29,6 +29,17 @@ def test_create_task_dry_run_from_cli(capsys) -> None:
     assert payload["operations"][0]["json"]["name"] == "Ship it"
 
 
+def test_onboard_aliases_print_macro_briefing(capsys) -> None:
+    for command in ("onboard", "guide", "welcome"):
+        assert main([command]) == 0
+        output = capsys.readouterr().out
+        assert "clickup-agent" in output
+        assert "doctor --live-auth" in output
+        assert "dev-sync" in output
+        assert "branch audit" in output
+        assert "hotfix-doc" in output
+
+
 def test_write_toolchains_default_to_dry_run_from_cli(capsys) -> None:
     assert main(["run", "create-task", "--list-id", "123", "--name", "Ship it"]) == 0
 
@@ -629,6 +640,70 @@ def test_dev_sync_clickup_to_github_dry_run_plans_pr_body_block(capsys) -> None:
     assert operation["path"] == "https://github.com/acme/repo/pull/12"
     assert "<!-- clickup-agent:dev-sync:start -->" in operation["body_block"]
     assert payload["response"]["planned_updates"]["github_pr_body"] == "upsert"
+
+
+def test_hotfix_doc_dry_run_creates_task_and_resolved_tracking_checklist(capsys) -> None:
+    assert (
+        main(
+            [
+                "run",
+                "hotfix-doc",
+                "--dry-run",
+                "--list-id",
+                "123",
+                "--title",
+                "Fix PR docs",
+                "--pr-url",
+                "https://github.com/acme/repo/pull/12",
+                "--branch",
+                "hotfix/docs",
+                "--merge-commit",
+                "abc123",
+                "--problem",
+                "Docs missed the changed endpoint.",
+                "--fix",
+                "Documented the endpoint and validation.",
+                "--changed-file",
+                "README.md",
+                "--changed-file",
+                "references/dev-workflows.md",
+                "--validation",
+                "uv run pytest",
+                "--domain-tag",
+                "docs",
+            ]
+        )
+        == 0
+    )
+
+    payload = _json_output(capsys)
+    create_task, create_checklist, *items = payload["operations"]
+
+    assert payload["dry_run"] is True
+    assert create_task["operation_id"] == "CreateTask"
+    assert create_task["json"]["name"] == "Fix PR docs"
+    assert create_task["json"]["status"] == "completed"
+    assert create_task["json"]["priority"] == 2
+    assert create_task["json"]["tags"] == ["documentation", "github", "hotfix", "docs"]
+    assert "https://github.com/acme/repo/pull/12" in create_task["json"]["markdown_content"]
+    assert "README.md" in create_task["json"]["markdown_content"]
+    assert create_checklist["operation_id"] == "CreateChecklist"
+    assert create_checklist["json"] == {"name": "Hotfix tracking"}
+    assert [item["operation_id"] for item in items] == [
+        "CreateChecklistItem",
+        "EditChecklistItem",
+        "CreateChecklistItem",
+        "EditChecklistItem",
+        "CreateChecklistItem",
+        "EditChecklistItem",
+    ]
+    assert [item["json"]["name"] for item in items[::2]] == [
+        "Problem documented",
+        "Fix documented",
+        "Validation recorded",
+    ]
+    assert all(item["json"]["resolved"] is True for item in items[1::2])
+    assert payload["response"]["tags"] == ["documentation", "github", "hotfix", "docs"]
 
 
 def test_comment_help_cross_references_comments_wrapper(capsys) -> None:

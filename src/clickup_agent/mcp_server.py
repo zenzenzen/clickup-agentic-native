@@ -124,7 +124,9 @@ def create_server() -> FastMCP:
                 "clickup-agent run check-item",
                 "clickup-agent run sync-checklist",
                 "clickup-agent run dev-sync",
+                "clickup-agent run hotfix-doc",
                 "clickup-agent dev pr",
+                "clickup-agent dev audit",
                 "clickup-agent run subtasks",
                 "clickup-agent run tags",
                 "clickup-agent run timer",
@@ -767,6 +769,42 @@ def create_server() -> FastMCP:
                 commit=commit,
                 custom_task_ids=custom_task_ids,
                 team_id=team_id,
+            ),
+            live=live,
+        )
+
+    @server.tool()
+    def clickup_agent_hotfix_doc(
+        list_id: str,
+        title: str,
+        pr_url: str,
+        problem: str,
+        fix: str,
+        branch: str | None = None,
+        merge_commit: str | None = None,
+        changed_files: list[str] | None = None,
+        validation: str | None = None,
+        domain_tag: str | None = None,
+        status: str | None = None,
+        priority: int | None = None,
+        live: bool = False,
+    ) -> dict[str, Any]:
+        """Create a completed documentation task for a hotfix PR. Defaults to dry-run."""
+        return _run_mcp_toolchain(
+            "hotfix-doc",
+            _payload_without_none(
+                list_id=list_id,
+                title=title,
+                pr_url=pr_url,
+                problem=problem,
+                fix=fix,
+                branch=branch,
+                merge_commit=merge_commit,
+                changed_files=changed_files,
+                validation=validation,
+                domain_tag=domain_tag,
+                status=status,
+                priority=priority,
             ),
             live=live,
         )

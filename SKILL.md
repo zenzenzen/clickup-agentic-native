@@ -44,14 +44,16 @@ The canonical local secret file is `$HOME/.config/clickup-agent/.env`. That is t
 - **Use an uncovered generated operation**: run `clickup-agent tools list --format json`, then `clickup-agent run <PascalCaseOperationId> --dry-run ...`; only add `--live` when the user explicitly wants the mutation.
 - **Use a curated wrapper**: run `clickup-agent hotkeys list`, then `clickup-agent run <kebab-case-wrapper> --dry-run ...`. Exact PascalCase operation IDs select generated operations; kebab-case names select curated wrappers when available.
 - **Work with task descriptions**: prefer `markdown_content`/`--markdown-content` for rich descriptions, and expect ClickUp to normalize rendered text when task data is fetched later.
+- **Onboard a user or agent**: run `clickup-agent onboard` and read `references/onboarding.md`.
 - **Back-link development work**: read `references/development-links.md`; if a GitHub PR already exists for the current branch, include its URL when updating the related ClickUp task.
 - **Reconcile merged branches into ClickUp**: run `clickup-agent dev audit` first, then use merged PR details with `dev-sync`; ask before reading commit history for backfill.
+- **Document a hotfix PR**: use `clickup-agent run hotfix-doc --dry-run`; add `--live` only when the documentation task should be created.
 - **Keep the task as a second brain**: for any non-trivial change, start or update `work-log` checklists, check off completed work and verification, and append decisions with `decision-log`.
 - **Install this skill for Codex discovery**: run `bash scripts/install-skill.sh`.
 
 ## Current Truth
 
-Implemented today: Python 3.12 CLI, generated ClickUp V2 tool catalog, `tools list` for generated OpenAPI operations, `hotkeys list` for curated wrappers, read-only `dev pr` and `dev audit` helpers, task/search/comment/checklist/timer `run` wrappers, compact task fetches, task status discovery, checklist sync, dev sync, work-log and decision-log second-brain wrappers, generated-operation fallback through `clickup-agent run <operation-id-or-name>`, `doctor --live-auth`, MCP bootstrap/status tools, direct MCP wrappers for the implemented run wrappers, `clickup_agent_run_operation`, Cursor MCP config support, and skill installation.
+Implemented today: Python 3.12 CLI, generated ClickUp V2 tool catalog, `tools list` for generated OpenAPI operations, `hotkeys list` for curated wrappers, onboarding aliases, read-only `dev pr` and `dev audit` helpers, task/search/comment/checklist/timer `run` wrappers, compact task fetches, task status discovery, checklist sync, dev sync, work-log, decision-log, and hotfix-doc macro wrappers, generated-operation fallback through `clickup-agent run <operation-id-or-name>`, `doctor --live-auth`, MCP bootstrap/status tools, direct MCP wrappers for the implemented run wrappers, `clickup_agent_run_operation`, Cursor MCP config support, and skill installation.
 
 Planned: broader ClickUp API workflows for docs, users, guests, user groups, lists, attachments, webhooks, admin surfaces, richer entity resolution, and expanded curated wrappers.
 
@@ -67,6 +69,7 @@ clickup-agent tools list --format json
 clickup-agent tools find task comments
 clickup-agent hotkeys list
 clickup-agent doctor || true
+clickup-agent onboard
 clickup-agent dev pr
 clickup-agent dev audit
 clickup-agent run create-task --dry-run --list-id 123 --name "Smoke test"
@@ -81,8 +84,20 @@ clickup-agent run dev-sync --dry-run --task-id abc --branch feature/demo --pr-ur
 clickup-agent run dev-sync --dry-run --task-id abc --mode clickup-to-github --pr-url https://github.com/org/repo/pull/1
 clickup-agent run work-log --dry-run --task-id abc --add-item "Implement change"
 clickup-agent run decision-log --dry-run --task-id abc --decision "Switched X to Y"
+clickup-agent run hotfix-doc --dry-run --list-id 123 --title "Fix docs" --pr-url https://github.com/org/repo/pull/1 --problem "What broke" --fix "What changed"
 clickup-agent run CreateChecklist --dry-run --task-id abc --name "Smoke generated op"
 ```
+
+## Onboarding & Macro Movesets
+
+Use `clickup-agent onboard` when a user or agent needs the shortest briefing on
+env setup, doctor checks, curated toolchains, and macro movesets.
+
+| User says | Macro |
+|---|---|
+| "sync this task", "update the task for this branch", "link the PR" | `dev-sync` |
+| "audit my branches", "which branches are merged", "reconcile ClickUp with git" | `dev audit` then `dev-sync` |
+| "log this hotfix", "document PR #N as a hotfix task" | `hotfix-doc` |
 
 ## Sync A Task With Its Branch PR
 

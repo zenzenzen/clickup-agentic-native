@@ -88,3 +88,26 @@ fields. Use merged PR fields from this output as the low-token source for
 
 Do not inspect `git log` or backfill detailed comments/checklists from commit
 history until the user explicitly approves that extra pass.
+
+## Hotfix Documentation
+
+Use `hotfix-doc` when a merged PR needs a documentation-only ClickUp receipt:
+
+```bash
+clickup-agent run hotfix-doc \
+  --dry-run \
+  --list-id 123 \
+  --title "Fix docs" \
+  --pr-url https://github.com/org/repo/pull/1 \
+  --branch hotfix/docs \
+  --merge-commit abc123 \
+  --problem "What broke" \
+  --fix "What changed" \
+  --changed-file README.md \
+  --validation "uv run pytest"
+```
+
+The macro creates a completed task with `documentation`, `github`, and `hotfix`
+tags, high priority, PR fields in `markdown_content`, and a resolved `Hotfix
+tracking` checklist. It previews by default; add `--live` only when the task
+should be created.

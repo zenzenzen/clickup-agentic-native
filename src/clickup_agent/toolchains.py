@@ -132,6 +132,7 @@ class ToolchainRunner:
             "dev-sync": _run_dev_sync,
             "work-log": _run_work_log,
             "decision-log": _run_decision_log,
+            "hotfix-doc": _run_hotfix_doc,
             "subtasks": _run_subtasks,
             "tags": _run_tags,
             "timer": _run_timer,
@@ -313,6 +314,13 @@ def _local_wrapper_metadata(name: str) -> dict[str, Any]:
             "name": "decision-log",
             "summary": "Append a decision record comment to a task.",
             "operation_ids": ["CreateTaskComment"],
+            "is_write": True,
+        }
+    if name == "hotfix-doc":
+        return {
+            "name": "hotfix-doc",
+            "summary": "Create a completed documentation task for a merged hotfix PR.",
+            "operation_ids": ["CreateTask", "CreateChecklist", "CreateChecklistItem"],
             "is_write": True,
         }
     return {"name": name}
@@ -2085,6 +2093,129 @@ def _configure_decision_log(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--commit")
     parser.add_argument("--custom-task-ids", action="store_true", default=None)
     parser.add_argument("--team-id")
+
+
+def _run_hotfix_doc(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_hotfix_doc)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["list_id", "title", "pr_url", "problem", "fix"], context="hotfix-doc")
+    list_id = str(payload.pop("list_id"))
+    title = str(payload.pop("title"))
+    changed_files = [str(item) for item in _csv_or_list(payload.pop("changed_files", []))]
+    tags = ["documentation", "github", "hotfix"]
+    domain_tag = payload.pop("domain_tag", None)
+    if domain_tag:
+        tags.append(str(domain_tag))
+    description = _hotfix_doc_markdown(
+        title=title,
+        pr_url=str(payload.pop("pr_url")),
+        branch=payload.pop("branch", None),
+        merge_commit=payload.pop("merge_commit", None),
+        problem=str(payload.pop("problem")),
+        fix=str(payload.pop("fix")),
+        changed_files=changed_files,
+        validation=payload.pop("validation", None),
+    )
+    task_payload = {
+        "list_id": list_id,
+        "name": title,
+        "markdown_content": description,
+        "tags": tags,
+        "status": str(payload.pop("status", "completed")),
+        "priority": _int(payload.pop("priority", 2), field="priority"),
+    }
+    operations: list[dict[str, Any]] = []
+    task_operation, task_response = _execute_operation(
+        catalog,
+        "CreateTask",
+        task_payload,
+        dry_run=options.dry_run,
+        client=client,
+    )
+    operations.append(task_operation)
+    task_id = "<created-task-id>" if options.dry_run else _id_from(task_response)
+    if task_id is None:
+        raise ToolchainError("CreateTask response did not include a task id for hotfix-doc checklist")
+    checklist_operation, checklist_response = _execute_operation(
+        catalog,
+        "CreateChecklist",
+        {"task_id": task_id, "body": {"name": "Hotfix tracking"}},
+        dry_run=options.dry_run,
+        client=client,
+    )
+    operations.append(checklist_operation)
+    checklist_id = "<created-checklist-id>" if options.dry_run else _id_from(_extract_checklist(checklist_response))
+    if checklist_id is None:
+        raise ToolchainError("CreateChecklist response did not include a checklist id for hotfix-doc items")
+    item_operations, created_items = _create_checklist_items(
+        catalog,
+        checklist_id,
+        [
+            {"name": "Problem documented", "resolved": True},
+            {"name": "Fix documented", "resolved": True},
+            {"name": "Validation recorded", "resolved": True},
+        ],
+        options.dry_run,
+        client,
+    )
+    operations.extend(item_operations)
+    response: dict[str, Any] = {
+        "task_id": task_id,
+        "title": title,
+        "tags": tags,
+        "checklist": "Hotfix tracking",
+        "items": ["Problem documented", "Fix documented", "Validation recorded"],
+    }
+    if not options.dry_run:
+        response["created_items"] = created_items
+    return RunResult(options.name, options.dry_run, operations, response)
+
+
+def _configure_hotfix_doc(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--list-id", required=False)
+    parser.add_argument("--title")
+    parser.add_argument("--pr-url")
+    parser.add_argument("--branch")
+    parser.add_argument("--merge-commit")
+    parser.add_argument("--problem")
+    parser.add_argument("--fix")
+    parser.add_argument("--changed-file", dest="changed_files", action="append")
+    parser.add_argument("--validation")
+    parser.add_argument("--domain-tag")
+    parser.add_argument("--status")
+    parser.add_argument("--priority")
+
+
+def _hotfix_doc_markdown(
+    *,
+    title: str,
+    pr_url: str,
+    branch: str | None,
+    merge_commit: str | None,
+    problem: str,
+    fix: str,
+    changed_files: list[str],
+    validation: str | None,
+) -> str:
+    lines = [
+        f"# {title}",
+        "",
+        "## GitHub",
+        f"- PR: {pr_url}",
+        f"- Branch: {branch or 'unknown'}",
+        f"- Merge commit: {merge_commit or 'unknown'}",
+        "",
+        "## Problem",
+        problem,
+        "",
+        "## Fix",
+        fix,
+    ]
+    if changed_files:
+        lines.extend(["", "## Changed files", *[f"- {path}" for path in changed_files]])
+    if validation:
+        lines.extend(["", "## Validation", validation])
+    return "\n".join(lines)
 
 
 def _parse_checklist_items(

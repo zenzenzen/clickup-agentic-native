@@ -9,6 +9,9 @@ Read `../CONTEXT.md` for product intent and `../UBIQUITOUS_LANGUAGE.md` for cano
 - `clickup-agent --version`
 - `clickup-agent doctor`
 - `clickup-agent doctor --live-auth`
+- `clickup-agent onboard`
+- `clickup-agent guide`
+- `clickup-agent welcome`
 - `clickup-agent mcp`
 - Generated ClickUp V2 OpenAPI catalog with 137 normalized operations
 - `clickup-agent tools list [--format table|json] [--tag <tag>] [--write-only]`
@@ -41,6 +44,7 @@ Read `../CONTEXT.md` for product intent and `../UBIQUITOUS_LANGUAGE.md` for cano
 - `clickup-agent run dev-sync`
 - `clickup-agent run work-log`
 - `clickup-agent run decision-log`
+- `clickup-agent run hotfix-doc`
 - `clickup-agent run <generated operation name or ID>`
 - `scripts/install.sh` for env file, local install, and Cursor MCP config
 - `scripts/install-skill.sh` for Codex skill discovery
@@ -76,6 +80,7 @@ Read `../CONTEXT.md` for product intent and `../UBIQUITOUS_LANGUAGE.md` for cano
   - `clickup_agent_dev_sync`
   - `clickup_agent_work_log`
   - `clickup_agent_decision_log`
+  - `clickup_agent_hotfix_doc`
 
 ## CLI Command Shape
 
@@ -86,6 +91,7 @@ clickup-agent chat
 clickup-agent tools list
 clickup-agent hotkeys list
 clickup-agent run <curated-wrapper-or-generated-operation>
+clickup-agent onboard
 clickup-agent doctor
 clickup-agent mcp
 ```
@@ -125,6 +131,7 @@ Agents can call generated operations directly through `clickup-agent run <operat
 - `dev-sync`: GitHub branch/PR state sync using `GetTask`, `GetTaskComments`, task/comment updates, non-destructive checklist item convergence, and optional managed GitHub PR-body updates via `--mode clickup-to-github|bidirectional`
 - `work-log`: mutable `Action Items` or `Verification` checklist state using non-destructive checklist item convergence
 - `decision-log`: append-only decision record comments using visible `[dev-sync:decision]` markers
+- `hotfix-doc`: completed documentation task creation for a hotfix PR using `CreateTask`, `CreateChecklist`, and `CreateChecklistItem`
 
 ## Still Planned
 
