@@ -4,6 +4,20 @@
 
 The command name for the project will be `clickup-agent`.
 
+## Quickstart
+
+From a fresh clone:
+
+```bash
+bash scripts/quickstart.sh
+clickup-agent connect <cursor|claude-code|codex|generic>
+clickup-agent doctor --live-auth
+```
+
+For a fully non-interactive agent install, see `references/install-quickstart.md`.
+`clickup-agent setup` writes only to `$HOME/.config/clickup-agent/.env`, and
+`connect` registers MCP clients with the portable `clickup-agent mcp` command.
+
 ## Attribution
 
 This project is based on interfacing with ClickUp, the work management platform and APIs provided by ClickUp, Inc. ClickUp is a trademark of ClickUp, Inc.
@@ -97,34 +111,24 @@ git clone https://github.com/zenzenzen/clickup-agentic-native.git
 cd clickup-agentic-native
 ```
 
-Create local secrets from the template in the default user config location:
+Install the Python package, then create local secrets in the default user config location:
 
 ```bash
-mkdir -p "$HOME/.config/clickup-agent"
-cp .env.example "$HOME/.config/clickup-agent/.env"
-chmod 600 "$HOME/.config/clickup-agent/.env"
+uv tool install . --python 3.12 --reinstall
+clickup-agent setup
 ```
 
-Then edit `$HOME/.config/clickup-agent/.env`:
+`setup` prompts interactively by default and writes `$HOME/.config/clickup-agent/.env`
+with owner-only permissions. For non-interactive setup, pass flags or process env vars:
 
 ```bash
-CLICKUP_API_KEY=your_clickup_personal_token
-CLICKUP_WORKSPACE_ID=your_default_workspace_id
-CLICKUP_WEBHOOK_SECRET=optional_future_webhook_signing_secret
+CLICKUP_API_KEY=... CLICKUP_WORKSPACE_ID=... clickup-agent setup --non-interactive
 ```
 
 Or let the installer walk you through it:
 
 ```bash
 bash scripts/install.sh
-```
-
-The installer can also add `clickup-agent` to Cursor as an MCP server. Choose project config for this repo only, or global config for every Cursor workspace.
-
-Install the Python package:
-
-```bash
-uv tool install . --python 3.12 --reinstall
 ```
 
 During early development, use editable mode instead:
@@ -141,7 +145,22 @@ Once installed, your LLM client should call the agent through the `clickup-agent
 clickup-agent mcp
 ```
 
-Example LLM client server configuration:
+Print or write client-specific MCP registration with:
+
+```bash
+clickup-agent connect cursor
+clickup-agent connect claude-code
+clickup-agent connect codex
+clickup-agent connect generic
+```
+
+`connect cursor --write --scope project` writes `.cursor/mcp.json`;
+`connect cursor --write --scope global` writes `~/.cursor/mcp.json`;
+`connect codex --write` updates `~/.codex/config.toml`. The Claude Code path
+prints the registration command, and `connect claude-code --write` runs it when
+the `claude` CLI is available.
+
+Portable MCP server configuration:
 
 ```json
 {
@@ -157,7 +176,7 @@ Example LLM client server configuration:
 
 For clients that do not support MCP yet, the fallback integration shape is to call focused CLI commands directly, such as `clickup-agent run search` or `clickup-agent run create-task`.
 
-For Cursor, place the same server definition in `.cursor/mcp.json` for a project-specific install or `~/.cursor/mcp.json` for a global install. The installer can write this for you and preserves any existing MCP servers. A portable template lives at `.cursor/mcp.example.json`.
+For Cursor, place the same server definition in `.cursor/mcp.json` for a project-specific install or `~/.cursor/mcp.json` for a global install. `connect cursor --write` and the installer can write this for you and preserve any existing MCP servers. A portable template lives at `.cursor/mcp.example.json`.
 
 The native agent always reads `$HOME/.config/clickup-agent/.env`. Do not set `CLICKUP_ENV_FILE`; it is ignored by `clickup-agent`.
 

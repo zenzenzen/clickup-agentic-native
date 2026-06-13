@@ -10,6 +10,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 DEFAULT_ENV_FILE="${HOME}/.config/clickup-agent/.env"
+NON_INTERACTIVE="false"
+YES="false"
+API_KEY="${CLICKUP_API_KEY:-}"
+WORKSPACE_ID="${CLICKUP_WORKSPACE_ID:-}"
+WEBHOOK_SECRET="${CLICKUP_WEBHOOK_SECRET:-}"
+INSTALL_METHOD="prompt"
+CURSOR_SCOPE="prompt"
+INSTALL_SKILL="false"
 
 say() {
   printf '\n%s\n' "$*"
@@ -53,6 +61,102 @@ shell_quote_env_value() {
   printf '"%s"' "${value}"
 }
 
+usage() {
+  cat <<'TXT'
+Usage: bash scripts/install.sh [options]
+
+Options:
+  --non-interactive              Fail instead of prompting for missing required values.
+  --api-key VALUE                ClickUp API token. Env fallback: CLICKUP_API_KEY.
+  --workspace-id VALUE           Default workspace ID. Env fallback: CLICKUP_WORKSPACE_ID.
+  --webhook-secret VALUE         Optional webhook secret. Env fallback: CLICKUP_WEBHOOK_SECRET.
+  --install-method uv|pip|pipx|skip
+  --cursor project|global|skip
+  --skill                        Install the bundled Codex skill after setup.
+  --yes                          Use default non-secret choices.
+  -h, --help                     Show this help.
+TXT
+}
+
+require_value() {
+  local option="$1"
+  local value="${2:-}"
+  if [[ -z "${value}" ]]; then
+    printf '%s requires a value.\n' "${option}" >&2
+    exit 2
+  fi
+  printf '%s' "${value}"
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --non-interactive)
+        NON_INTERACTIVE="true"
+        shift
+        ;;
+      --api-key)
+        API_KEY="$(require_value "$1" "${2:-}")"
+        shift 2
+        ;;
+      --workspace-id)
+        WORKSPACE_ID="$(require_value "$1" "${2:-}")"
+        shift 2
+        ;;
+      --webhook-secret)
+        WEBHOOK_SECRET="$(require_value "$1" "${2:-}")"
+        shift 2
+        ;;
+      --install-method)
+        INSTALL_METHOD="$(require_value "$1" "${2:-}")"
+        shift 2
+        ;;
+      --cursor)
+        CURSOR_SCOPE="$(require_value "$1" "${2:-}")"
+        shift 2
+        ;;
+      --skill)
+        INSTALL_SKILL="true"
+        shift
+        ;;
+      --yes)
+        YES="true"
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        printf 'Unknown option: %s\n' "$1" >&2
+        usage >&2
+        exit 2
+        ;;
+    esac
+  done
+
+  case "${INSTALL_METHOD}" in
+    prompt|uv|pip|pipx|skip) ;;
+    *)
+      printf 'Unsupported --install-method: %s\n' "${INSTALL_METHOD}" >&2
+      exit 2
+      ;;
+  esac
+  case "${CURSOR_SCOPE}" in
+    prompt|project|global|skip) ;;
+    *)
+      printf 'Unsupported --cursor scope: %s\n' "${CURSOR_SCOPE}" >&2
+      exit 2
+      ;;
+  esac
+  if [[ "${YES}" == "true" && "${INSTALL_METHOD}" == "prompt" ]]; then
+    INSTALL_METHOD="uv"
+  fi
+  if [[ "${YES}" == "true" && "${CURSOR_SCOPE}" == "prompt" ]]; then
+    CURSOR_SCOPE="project"
+  fi
+}
+
 write_env_file() {
   local env_file="$1"
   local api_key="$2"
@@ -77,7 +181,40 @@ write_env_file() {
   chmod 600 "${env_file}"
 }
 
+install_package_method() {
+  local method="$1"
+  case "${method}" in
+    uv)
+      if ! command -v uv >/dev/null 2>&1; then
+        say "uv is not installed. Skipping package install."
+        printf 'Install uv later, then run: uv tool install "%s" --python 3.12 --reinstall\n' "${REPO_ROOT}"
+        return 0
+      fi
+      (cd "${REPO_ROOT}" && uv tool install . --python 3.12 --reinstall)
+      ;;
+    pip)
+      (cd "${REPO_ROOT}" && python3 -m pip install -e .)
+      ;;
+    pipx)
+      if ! command -v pipx >/dev/null 2>&1; then
+        say "pipx is not installed. Skipping package install."
+        printf 'Install pipx later, then run: pipx install "%s"\n' "${REPO_ROOT}"
+        return 0
+      fi
+      (cd "${REPO_ROOT}" && pipx install . --force)
+      ;;
+    skip)
+      say "Skipping package install."
+      ;;
+  esac
+}
+
 install_package() {
+  if [[ "${INSTALL_METHOD}" != "prompt" ]]; then
+    install_package_method "${INSTALL_METHOD}"
+    return 0
+  fi
+
   say "Install the clickup-agent command?"
   printf '  1) uv tool install . (recommended when uv is available)\n'
   printf '  2) python -m pip install -e . (editable development install)\n'
@@ -90,26 +227,16 @@ install_package() {
 
   case "${choice}" in
     1)
-      if ! command -v uv >/dev/null 2>&1; then
-        say "uv is not installed. Skipping package install."
-        printf 'Install uv later, then run: uv tool install "%s" --python 3.12 --reinstall\n' "${REPO_ROOT}"
-        return 0
-      fi
-      (cd "${REPO_ROOT}" && uv tool install . --python 3.12 --reinstall)
+      install_package_method "uv"
       ;;
     2)
-      (cd "${REPO_ROOT}" && python3 -m pip install -e .)
+      install_package_method "pip"
       ;;
     3)
-      if ! command -v pipx >/dev/null 2>&1; then
-        say "pipx is not installed. Skipping package install."
-        printf 'Install pipx later, then run: pipx install "%s"\n' "${REPO_ROOT}"
-        return 0
-      fi
-      (cd "${REPO_ROOT}" && pipx install . --force)
+      install_package_method "pipx"
       ;;
     4)
-      say "Skipping package install."
+      install_package_method "skip"
       ;;
     *)
       say "Unknown choice; skipping package install."
@@ -132,11 +259,8 @@ cursor_config_path() {
 install_cursor_config() {
   local scope="$1"
   local config_file
-  local command_path
 
   config_file="$(cursor_config_path "${scope}")"
-  command_path="$(command -v clickup-agent || true)"
-  command_path="${command_path:-clickup-agent}"
 
   mkdir -p "$(dirname "${config_file}")"
   if [[ -e "${config_file}" ]]; then
@@ -145,13 +269,12 @@ install_cursor_config() {
     say "Existing Cursor MCP config backed up to ${backup}"
   fi
 
-  python3 - "${config_file}" "${command_path}" <<'PY'
+  python3 - "${config_file}" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 config_path = Path(sys.argv[1])
-command = sys.argv[2]
 
 if config_path.exists() and config_path.read_text(encoding="utf-8").strip():
     try:
@@ -163,7 +286,7 @@ else:
 
 servers = config.setdefault("mcpServers", {})
 servers["clickup-agent"] = {
-    "command": command,
+    "command": "clickup-agent",
     "args": ["mcp"],
     "env": {},
 }
@@ -216,6 +339,8 @@ JSON
 }
 
 main() {
+  parse_args "$@"
+
   say "clickup-agent local installer"
   printf 'This will create the one native clickup-agent env file: %s\n' "${DEFAULT_ENV_FILE}"
 
@@ -223,24 +348,61 @@ main() {
   env_file="${DEFAULT_ENV_FILE}"
 
   local api_key
-  api_key="$(prompt_secret "Paste your ClickUp API token" "true")"
+  api_key="${API_KEY}"
+  if [[ -z "${api_key}" ]]; then
+    if [[ "${NON_INTERACTIVE}" == "true" ]]; then
+      printf 'CLICKUP_API_KEY is required. Pass --api-key or set CLICKUP_API_KEY.\n' >&2
+      exit 2
+    fi
+    api_key="$(prompt_secret "Paste your ClickUp API token" "true")"
+  fi
 
   local workspace_id
-  workspace_id="$(prompt_visible "Default ClickUp workspace ID (optional)")"
+  workspace_id="${WORKSPACE_ID}"
+  if [[ -z "${workspace_id}" && "${NON_INTERACTIVE}" != "true" ]]; then
+    workspace_id="$(prompt_visible "Default ClickUp workspace ID (optional)")"
+  fi
 
   local webhook_secret
-  webhook_secret="$(prompt_secret "Webhook/signing secret for inbound ClickUp events (optional)")"
-
-  mkdir -p "$(dirname "${env_file}")"
-  write_env_file "${env_file}" "${api_key}" "${workspace_id}" "${webhook_secret}"
-  say "Wrote ${env_file} with owner-only permissions."
+  webhook_secret="${WEBHOOK_SECRET}"
+  if [[ -z "${webhook_secret}" && "${NON_INTERACTIVE}" != "true" ]]; then
+    webhook_secret="$(prompt_secret "Webhook/signing secret for inbound ClickUp events (optional)")"
+  fi
 
   install_package
-  maybe_install_cursor_config
+
+  mkdir -p "$(dirname "${env_file}")"
+  if command -v clickup-agent >/dev/null 2>&1; then
+    CLICKUP_API_KEY="${api_key}" \
+      CLICKUP_WORKSPACE_ID="${workspace_id}" \
+      CLICKUP_WEBHOOK_SECRET="${webhook_secret}" \
+      clickup-agent setup --non-interactive --force
+  else
+    write_env_file "${env_file}" "${api_key}" "${workspace_id}" "${webhook_secret}"
+    say "Wrote ${env_file} with owner-only permissions."
+  fi
+
+  case "${CURSOR_SCOPE}" in
+    prompt)
+      maybe_install_cursor_config
+      ;;
+    project|global)
+      install_cursor_config "${CURSOR_SCOPE}"
+      ;;
+    skip)
+      say "Skipping Cursor MCP config."
+      ;;
+  esac
+
+  if [[ "${INSTALL_SKILL}" == "true" ]]; then
+    bash "${SCRIPT_DIR}/install-skill.sh"
+  fi
+
   print_llm_client_snippet
 
   say "Next check:"
-  printf 'clickup-agent doctor\n'
+  printf 'clickup-agent connect <cursor|claude-code|codex|generic>\n'
+  printf 'clickup-agent doctor --live-auth\n'
 }
 
 main "$@"

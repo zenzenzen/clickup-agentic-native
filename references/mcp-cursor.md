@@ -1,6 +1,7 @@
-# MCP And Cursor Reference
+# MCP Client Reference
 
-Use this when connecting `clickup-agent` to Cursor or another LLM client.
+Use this when connecting `clickup-agent` to Cursor, Claude Code, Codex, or
+another MCP-capable LLM client.
 
 ## Server Command
 
@@ -40,6 +41,39 @@ For all Cursor workspaces, use:
 
 The same JSON shape applies. `clickup-agent` always reads `$HOME/.config/clickup-agent/.env`; do not add `CLICKUP_ENV_FILE` to MCP config.
 
+## Connect Command
+
+Print client-specific registration:
+
+```bash
+clickup-agent connect cursor
+clickup-agent connect claude-code
+clickup-agent connect codex
+clickup-agent connect generic
+```
+
+Write config where supported:
+
+```bash
+clickup-agent connect cursor --write --scope project
+clickup-agent connect cursor --write --scope global
+clickup-agent connect codex --write
+```
+
+Claude Code registration is command-driven:
+
+```bash
+claude mcp add clickup-agent -- clickup-agent mcp
+```
+
+Codex config uses `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.clickup-agent]
+command = "clickup-agent"
+args = ["mcp"]
+```
+
 ## Installer Path
 
 Run:
@@ -48,7 +82,9 @@ Run:
 bash scripts/install.sh
 ```
 
-Choose project config or global config when prompted. The installer preserves existing MCP servers and backs up the existing config first.
+Choose project config or global config when prompted, or pass
+`--cursor project|global|skip` for non-interactive setup. The installer
+preserves existing MCP servers and backs up the existing config first.
 
 ## Troubleshooting
 
