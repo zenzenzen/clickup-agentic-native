@@ -12,8 +12,10 @@ import json
 
 from . import __version__
 from .client import ClickUpApiError, ClickUpClient
+from .connect_cmd import run_connect
 from .config import ConfigError, config_status, default_env_file, load_config
 from .registry import ToolOperation, load_catalog
+from .setup_cmd import run_setup
 from .toolchains import ToolchainError, run_toolchain
 
 
@@ -207,11 +209,51 @@ def build_parser() -> argparse.ArgumentParser:
     )
     doctor.set_defaults(func=_cmd_doctor)
 
+    def add_setup_parser(name: str) -> None:
+        setup = subcommands.add_parser(name, help="Create the native clickup-agent env file.")
+        setup.add_argument("--api-key", help="ClickUp API token. Process env fallback: CLICKUP_API_KEY.")
+        setup.add_argument(
+            "--workspace-id",
+            help="Default ClickUp workspace ID. Process env fallback: CLICKUP_WORKSPACE_ID.",
+        )
+        setup.add_argument(
+            "--webhook-secret",
+            help="Optional inbound webhook signing secret. Process env fallback: CLICKUP_WEBHOOK_SECRET.",
+        )
+        setup.add_argument("--non-interactive", action="store_true", help="Fail instead of prompting.")
+        setup.add_argument("--force", action="store_true", help="Overwrite after backing up any existing env file.")
+        setup.add_argument(
+            "--print",
+            action="store_true",
+            dest="print_only",
+            help="Show the redacted setup result without writing the env file.",
+        )
+        setup.add_argument(
+            "--live-auth",
+            action="store_true",
+            help="After writing, run the read-only ClickUp live auth probe.",
+        )
+        setup.set_defaults(func=run_setup)
+
+    add_setup_parser("setup")
+    add_setup_parser("init")
+
     chat = subcommands.add_parser("chat", help="Start the future interactive ClickUp agent.")
     chat.set_defaults(func=_cmd_placeholder("chat", "interactive ClickUp work sessions"))
 
     mcp = subcommands.add_parser("mcp", help="Start the future LLM/MCP tool server.")
     mcp.set_defaults(func=_cmd_mcp)
+
+    connect = subcommands.add_parser("connect", help="Print or write MCP client registration.")
+    connect.add_argument("client", choices=["cursor", "claude-code", "codex", "generic"], help="Client to connect.")
+    connect.add_argument("--write", action="store_true", help="Write or register the MCP config when supported.")
+    connect.add_argument(
+        "--scope",
+        choices=["project", "global"],
+        default="project",
+        help="Cursor config scope when using `connect cursor --write`.",
+    )
+    connect.set_defaults(func=run_connect)
 
     tools = subcommands.add_parser("tools", help="Inspect future ClickUp tools.")
     tools_subcommands = tools.add_subparsers(dest="tools_command", required=True)

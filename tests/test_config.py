@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
+import stat
 
 from clickup_agent.cli import main
-from clickup_agent.config import config_status, default_env_file, load_config
+from clickup_agent.config import config_status, default_env_file, load_config, write_env_file
 
 
 def _clear_clickup_env(monkeypatch) -> None:
@@ -90,6 +91,40 @@ def test_config_status_warns_about_broad_env_file_permissions(tmp_path, monkeypa
     status = config_status()
 
     assert status["warnings"] == ["Env file is readable by group or other users; run chmod 600 on it."]
+
+
+def test_write_env_file_creates_owner_only_file_and_backup(tmp_path, monkeypatch) -> None:
+    _clear_clickup_env(monkeypatch)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    env_file = default_env_file()
+
+    written = write_env_file(
+        {
+            "CLICKUP_API_KEY": "pk_first",
+            "CLICKUP_WORKSPACE_ID": "workspace-1",
+            "CLICKUP_WEBHOOK_SECRET": "",
+        },
+        force=True,
+    )
+
+    assert written == env_file
+    assert stat.S_IMODE(env_file.stat().st_mode) == 0o600
+    assert 'CLICKUP_API_KEY="pk_first"' in env_file.read_text(encoding="utf-8")
+
+    write_env_file(
+        {
+            "CLICKUP_API_KEY": "pk_second",
+            "CLICKUP_WORKSPACE_ID": "",
+            "CLICKUP_WEBHOOK_SECRET": "hook-secret",
+        },
+        force=True,
+    )
+
+    backups = list(env_file.parent.glob(".env.bak.*"))
+    assert len(backups) == 1
+    assert stat.S_IMODE(backups[0].stat().st_mode) == 0o600
+    assert "pk_first" in backups[0].read_text(encoding="utf-8")
+    assert "pk_second" in env_file.read_text(encoding="utf-8")
 
 
 def test_doctor_loads_default_env_file(tmp_path, monkeypatch, capsys) -> None:
