@@ -45,12 +45,13 @@ The canonical local secret file is `$HOME/.config/clickup-agent/.env`. That is t
 - **Use a curated wrapper**: run `clickup-agent hotkeys list`, then `clickup-agent run <kebab-case-wrapper> --dry-run ...`. Exact PascalCase operation IDs select generated operations; kebab-case names select curated wrappers when available.
 - **Work with task descriptions**: prefer `markdown_content`/`--markdown-content` for rich descriptions, and expect ClickUp to normalize rendered text when task data is fetched later.
 - **Back-link development work**: read `references/development-links.md`; if a GitHub PR already exists for the current branch, include its URL when updating the related ClickUp task.
+- **Reconcile merged branches into ClickUp**: run `clickup-agent dev audit` first, then use merged PR details with `dev-sync`; ask before reading commit history for backfill.
 - **Keep the task as a second brain**: for any non-trivial change, start or update `work-log` checklists, check off completed work and verification, and append decisions with `decision-log`.
 - **Install this skill for Codex discovery**: run `bash scripts/install-skill.sh`.
 
 ## Current Truth
 
-Implemented today: Python 3.12 CLI, generated ClickUp V2 tool catalog, `tools list` for generated OpenAPI operations, `hotkeys list` for curated wrappers, task/search/comment/checklist/timer `run` wrappers, compact task fetches, task status discovery, checklist sync, dev sync, work-log and decision-log second-brain wrappers, generated-operation fallback through `clickup-agent run <operation-id-or-name>`, `doctor --live-auth`, MCP bootstrap/status tools, direct MCP wrappers for the implemented run wrappers, `clickup_agent_run_operation`, Cursor MCP config support, and skill installation.
+Implemented today: Python 3.12 CLI, generated ClickUp V2 tool catalog, `tools list` for generated OpenAPI operations, `hotkeys list` for curated wrappers, read-only `dev pr` and `dev audit` helpers, task/search/comment/checklist/timer `run` wrappers, compact task fetches, task status discovery, checklist sync, dev sync, work-log and decision-log second-brain wrappers, generated-operation fallback through `clickup-agent run <operation-id-or-name>`, `doctor --live-auth`, MCP bootstrap/status tools, direct MCP wrappers for the implemented run wrappers, `clickup_agent_run_operation`, Cursor MCP config support, and skill installation.
 
 Planned: broader ClickUp API workflows for docs, users, guests, user groups, lists, attachments, webhooks, admin surfaces, richer entity resolution, and expanded curated wrappers.
 
@@ -67,6 +68,7 @@ clickup-agent tools find task comments
 clickup-agent hotkeys list
 clickup-agent doctor || true
 clickup-agent dev pr
+clickup-agent dev audit
 clickup-agent run create-task --dry-run --list-id 123 --name "Smoke test"
 clickup-agent run list-hierarchy --dry-run --team-id 123
 clickup-agent run update-task --dry-run --task-id abc --name "Smoke rename"
@@ -98,6 +100,20 @@ only its visible `[dev-sync]` comment/description block, and manages the
 `Development Sync` checklist by item name. Use `--mode clickup-to-github` to
 upsert only the managed PR-body block, and `--mode bidirectional` to compose
 both directions. Never use ClickUp state to close, merge, or reopen PRs.
+
+## Reconcile Merged Branches Into ClickUp
+
+When the user asks to audit branches, reconcile merged work, or backfill
+ClickUp from GitHub history, start read-only:
+
+```bash
+clickup-agent dev audit
+```
+
+For each merged PR with a task-id guess, prefer the PR title, URL, merge state,
+and branch fields from the audit output as inputs to `dev-sync`. Do not read
+`git log`, expand commit history, or infer detailed checklist/comment backfill
+until the user explicitly approves that extra history pass.
 
 ## Second-Brain Work Journal
 

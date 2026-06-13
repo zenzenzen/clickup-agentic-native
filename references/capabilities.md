@@ -15,6 +15,7 @@ Read `../CONTEXT.md` for product intent and `../UBIQUITOUS_LANGUAGE.md` for cano
 - `clickup-agent tools find <query...> [--format table|json]`
 - `clickup-agent hotkeys list [--format table|json]`
 - `clickup-agent dev pr`
+- `clickup-agent dev audit`
 - `clickup-agent run search`
 - `clickup-agent run list-hierarchy`
 - `clickup-agent run create-task`
@@ -89,7 +90,7 @@ clickup-agent doctor
 clickup-agent mcp
 ```
 
-`chat` remains a placeholder. `tools list` discovers generated OpenAPI operations; `tools find` searches generated operation names, operation IDs, summaries, and tags; `hotkeys list` discovers curated wrapper commands. The first `run` commands, generated operation fallback, and direct MCP wrappers execute real generated or curated workflows. MCP write wrappers default to dry-run unless the caller explicitly sets `live` to true.
+`chat` remains a placeholder. `tools list` discovers generated OpenAPI operations; `tools find` searches generated operation names, operation IDs, summaries, and tags; `hotkeys list` discovers curated wrapper commands. `dev pr` and `dev audit` are read-only GitHub/git helpers for branch and PR context. The first `run` commands, generated operation fallback, and direct MCP wrappers execute real generated or curated workflows. MCP write wrappers default to dry-run unless the caller explicitly sets `live` to true.
 
 ## Generated Toolsets
 

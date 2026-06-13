@@ -71,3 +71,20 @@ them:
 The same command defaults to `--mode github-to-clickup`; use `--mode
 bidirectional` when both ClickUp and GitHub surfaces should be updated in one
 dry-run/live envelope.
+
+## Branch Audit
+
+`dev audit` is the read-only starting point for reconciling local branches and
+merged PRs back into ClickUp tasks:
+
+```bash
+clickup-agent dev audit
+```
+
+It enumerates local branches, joins them with one batched GitHub PR listing, and
+prints compact JSON with branch, PR, merge, task-id guess, ahead, and behind
+fields. Use merged PR fields from this output as the low-token source for
+`dev-sync`.
+
+Do not inspect `git log` or backfill detailed comments/checklists from commit
+history until the user explicitly approves that extra pass.
