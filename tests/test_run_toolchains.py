@@ -596,6 +596,41 @@ def test_decision_log_appends_one_comment_and_never_updates_existing_comments() 
     assert result.response["append_only"] is True
 
 
+def test_dev_sync_clickup_to_github_dry_run_requires_pr_url(capsys) -> None:
+    assert main(["run", "dev-sync", "--dry-run", "--task-id", "abc", "--mode", "clickup-to-github"]) == 2
+
+    captured = capsys.readouterr()
+
+    assert "clickup-to-github requires --pr-url" in captured.out
+
+
+def test_dev_sync_clickup_to_github_dry_run_plans_pr_body_block(capsys) -> None:
+    assert (
+        main(
+            [
+                "run",
+                "dev-sync",
+                "--dry-run",
+                "--task-id",
+                "abc",
+                "--mode",
+                "clickup-to-github",
+                "--pr-url",
+                "https://github.com/acme/repo/pull/12",
+            ]
+        )
+        == 0
+    )
+
+    payload = _json_output(capsys)
+    operation = payload["operations"][-1]
+
+    assert operation["operation_id"] == "GitHubPrBodyUpsert"
+    assert operation["path"] == "https://github.com/acme/repo/pull/12"
+    assert "<!-- clickup-agent:dev-sync:start -->" in operation["body_block"]
+    assert payload["response"]["planned_updates"]["github_pr_body"] == "upsert"
+
+
 def test_comment_help_cross_references_comments_wrapper(capsys) -> None:
     assert main(["run", "comment", "--help"]) == 0
 

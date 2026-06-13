@@ -15,6 +15,7 @@ from typing import Any, Callable
 
 from .client import ClickUpApiError, ClickUpClient
 from .config import ConfigError, load_workspace_id
+from .devlinks import render_pr_body_block, write_pr_body_block
 from .devsync import (
     DEVELOPMENT_SYNC_CHECKLIST,
     ClickUpTaskContext,
@@ -1748,6 +1749,12 @@ def _run_dev_sync(options: RunOptions, catalog: ToolCatalog, client: ClickUpClie
         **{key: payload.pop(key) for key in ("custom_task_ids", "team_id") if key in payload},
     }
     task_lookup_payload = {**base_payload, "include_markdown_description": True}
+    mode = str(payload.pop("mode", "github-to-clickup"))
+    if mode not in {"github-to-clickup", "clickup-to-github", "bidirectional"}:
+        raise ToolchainError("dev-sync --mode must be github-to-clickup, clickup-to-github, or bidirectional")
+    pr_title_prefix = payload.pop("pr_title_prefix", None)
+    if mode in {"clickup-to-github", "bidirectional"} and not payload.get("pr_url"):
+        raise ToolchainError("clickup-to-github requires --pr-url from dev pr or an explicit PR URL")
     inputs = _dev_sync_input(task_id, payload)
 
     operations: list[dict[str, Any]] = []
@@ -1767,8 +1774,10 @@ def _run_dev_sync(options: RunOptions, catalog: ToolCatalog, client: ClickUpClie
         comments=_comments_from_response(comments_response),
     )
     plan = build_dev_sync_plan(inputs, task_context)
+    apply_clickup = mode in {"github-to-clickup", "bidirectional"}
+    apply_github = mode in {"clickup-to-github", "bidirectional"}
 
-    if plan.task_updates:
+    if apply_clickup and plan.task_updates:
         operation, _ = _execute_operation(
             catalog,
             "UpdateTask",
@@ -1778,7 +1787,7 @@ def _run_dev_sync(options: RunOptions, catalog: ToolCatalog, client: ClickUpClie
         )
         operations.append(operation)
 
-    if plan.backlink_needed:
+    if apply_clickup and plan.backlink_needed:
         if plan.backlink_mode == "description":
             existing_description = task_context.task.get("description") or task_context.task.get("markdown_description") or ""
             operation, _ = _execute_operation(
@@ -1799,17 +1808,18 @@ def _run_dev_sync(options: RunOptions, catalog: ToolCatalog, client: ClickUpClie
             )
             operations.append(operation)
 
-    for comment_text in plan.comment_texts:
-        operation, _ = _execute_operation(
-            catalog,
-            "CreateTaskComment",
-            {**base_payload, "body": _comment_body(comment_text)},
-            dry_run=options.dry_run,
-            client=client,
-        )
-        operations.append(operation)
+    if apply_clickup:
+        for comment_text in plan.comment_texts:
+            operation, _ = _execute_operation(
+                catalog,
+                "CreateTaskComment",
+                {**base_payload, "body": _comment_body(comment_text)},
+                dry_run=options.dry_run,
+                client=client,
+            )
+            operations.append(operation)
 
-    if plan.status_comment is not None and plan.status_comment.get("id") is not None:
+    if apply_clickup and plan.status_comment is not None and plan.status_comment.get("id") is not None:
         operation, _ = _execute_operation(
             catalog,
             "UpdateComment",
@@ -1825,7 +1835,7 @@ def _run_dev_sync(options: RunOptions, catalog: ToolCatalog, client: ClickUpClie
             client=client,
         )
         operations.append(operation)
-    else:
+    elif apply_clickup:
         operation, _ = _execute_operation(
             catalog,
             "CreateTaskComment",
@@ -1835,28 +1845,53 @@ def _run_dev_sync(options: RunOptions, catalog: ToolCatalog, client: ClickUpClie
         )
         operations.append(operation)
 
-    checklist = _find_checklist_by_name(task_context.task, plan.checklist_name)
-    if checklist is None:
-        create_operation, create_response = _execute_operation(
-            catalog,
-            "CreateChecklist",
-            {**base_payload, "body": {"name": plan.checklist_name}},
-            dry_run=options.dry_run,
-            client=client,
+    if apply_clickup:
+        checklist = _find_checklist_by_name(task_context.task, plan.checklist_name)
+        if checklist is None:
+            create_operation, create_response = _execute_operation(
+                catalog,
+                "CreateChecklist",
+                {**base_payload, "body": {"name": plan.checklist_name}},
+                dry_run=options.dry_run,
+                client=client,
+            )
+            operations.append(create_operation)
+            checklist = _extract_checklist(create_response) if not options.dry_run else {"id": "<created-checklist-id>", "items": []}
+        checklist_id = _id_from(checklist) or "<existing-or-created-checklist-id>"
+        if options.dry_run:
+            item_operations, _ = _create_checklist_items(catalog, checklist_id, list(plan.checklist_items), True, None)
+        else:
+            item_operations, _, _ = _sync_checklist_items(catalog, checklist_id, checklist or {"items": []}, list(plan.checklist_items), client)
+        operations.extend(item_operations)
+
+    response = plan.to_response()
+    if apply_github:
+        block = render_pr_body_block(
+            task_id=task_id,
+            task_url=_task_url(task_context.task),
+            status=_task_status_name(task_context.task.get("status")) if task_context.task else None,
+            checklist_progress=_checklist_progress(task_context.task),
+            last_sync=inputs.last_sync,
         )
-        operations.append(create_operation)
-        checklist = _extract_checklist(create_response) if not options.dry_run else {"id": "<created-checklist-id>", "items": []}
-    checklist_id = _id_from(checklist) or "<existing-or-created-checklist-id>"
-    if options.dry_run:
-        item_operations, _ = _create_checklist_items(catalog, checklist_id, list(plan.checklist_items), True, None)
-    else:
-        item_operations, _, _ = _sync_checklist_items(catalog, checklist_id, checklist or {"items": []}, list(plan.checklist_items), client)
-    operations.extend(item_operations)
-    return RunResult(options.name, options.dry_run, operations, plan.to_response())
+        github_operation = {
+            "operation_id": "GitHubPrBodyUpsert",
+            "method": "PATCH",
+            "path": inputs.pr.url,
+            "body_block": block,
+            "guardrail": "only updates the clickup-agent managed PR body block",
+        }
+        if pr_title_prefix:
+            github_operation["title_prefix"] = pr_title_prefix
+        operations.append(github_operation)
+        response["planned_updates"]["github_pr_body"] = "upsert"
+        if not options.dry_run and inputs.pr.url:
+            response["github"] = write_pr_body_block(inputs.pr.url, block)
+    return RunResult(options.name, options.dry_run, operations, response)
 
 
 def _configure_dev_sync(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--task-id", required=False)
+    parser.add_argument("--mode", choices=["github-to-clickup", "clickup-to-github", "bidirectional"], default=None)
     parser.add_argument("--repo")
     parser.add_argument("--branch")
     parser.add_argument("--latest-commit")
@@ -1878,6 +1913,7 @@ def _configure_dev_sync(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--check-item", dest="check_items", action="append")
     parser.add_argument("--backlink-mode", choices=["comment", "description"], default=None)
     parser.add_argument("--no-backlink", action="store_true", default=None)
+    parser.add_argument("--pr-title-prefix")
     parser.add_argument("--custom-task-ids", action="store_true", default=None)
     parser.add_argument("--team-id")
 
@@ -1924,6 +1960,28 @@ def _comments_from_response(response: Any) -> list[Any]:
     if isinstance(response, list):
         return response
     return []
+
+
+def _task_url(task: dict[str, Any]) -> str | None:
+    value = task.get("url") if isinstance(task, dict) else None
+    return str(value) if value is not None else None
+
+
+def _checklist_progress(task: dict[str, Any]) -> list[str]:
+    checklists = task.get("checklists") if isinstance(task, dict) else None
+    if not isinstance(checklists, list):
+        return []
+    progress: list[str] = []
+    for checklist in checklists:
+        if not isinstance(checklist, dict):
+            continue
+        name = checklist.get("name")
+        items = [item for item in _checklist_items(checklist) if isinstance(item, dict)]
+        if not name or not items:
+            continue
+        resolved = sum(1 for item in items if bool(item.get("resolved")))
+        progress.append(f"{name} {resolved}/{len(items)}")
+    return progress
 
 
 def _run_work_log(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:

@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
 
 DevPrState = Literal["found", "not_found", "timeout", "gh_missing", "unauthenticated", "no_remote"]
+GITHUB_SYNC_START = "<!-- clickup-agent:dev-sync:start -->"
+GITHUB_SYNC_END = "<!-- clickup-agent:dev-sync:end -->"
 
 
 @dataclass(frozen=True)
@@ -119,6 +122,78 @@ def _compact_pr(pr: dict[str, Any]) -> dict[str, Any]:
         if isinstance(files, list)
         else [],
     }
+
+
+def render_pr_body_block(
+    *,
+    task_id: str,
+    task_url: str | None,
+    status: str | None,
+    checklist_progress: list[str],
+    last_sync: str,
+) -> str:
+    lines = [
+        GITHUB_SYNC_START,
+        "### ClickUp development state",
+        f"- Task: {task_url or task_id}",
+        f"- Status: {status or 'unknown'}",
+    ]
+    if checklist_progress:
+        lines.append("- Checklist progress:")
+        lines.extend(f"  - {item}" for item in checklist_progress)
+    else:
+        lines.append("- Checklist progress: none")
+    lines.append(f"- Last sync: {last_sync}")
+    lines.append(GITHUB_SYNC_END)
+    return "\n".join(lines)
+
+
+def upsert_pr_body_block(body: str | None, block: str) -> str:
+    """Insert or replace only the GitHub sync-managed PR body block."""
+    text = body or ""
+    start = text.find(GITHUB_SYNC_START)
+    end = text.find(GITHUB_SYNC_END, start if start >= 0 else 0)
+    if start >= 0 and end >= 0:
+        end += len(GITHUB_SYNC_END)
+        suffix = text[end:].lstrip()
+        updated = text[:start].rstrip() + "\n\n" + block
+        if suffix:
+            updated += "\n\n" + suffix
+        return updated
+    if not text.strip():
+        return block
+    return text.rstrip() + "\n\n" + block
+
+
+def write_pr_body_block(pr_url: str, block: str, *, timeout: float = 10.0) -> dict[str, Any]:
+    """Live GitHub write: update only the managed PR body block via gh."""
+    view = subprocess.run(
+        ["gh", "pr", "view", pr_url, "--json", "body"],
+        timeout=timeout,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if view.returncode != 0:
+        raise RuntimeError(_clean_reason(view.stderr) or "Could not read PR body with gh.")
+    try:
+        current = json.loads(view.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("gh pr view returned invalid JSON.") from exc
+    updated = upsert_pr_body_block(str(current.get("body") or ""), block)
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=True) as handle:
+        handle.write(updated)
+        handle.flush()
+        edit = subprocess.run(
+            ["gh", "pr", "edit", pr_url, "--body-file", handle.name],
+            timeout=timeout,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    if edit.returncode != 0:
+        raise RuntimeError(_clean_reason(edit.stderr) or "Could not update PR body with gh.")
+    return {"pr_url": pr_url, "updated": True}
 
 
 def _clean_reason(value: str | None) -> str:

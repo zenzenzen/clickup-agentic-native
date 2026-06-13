@@ -6,7 +6,7 @@ import subprocess
 import pytest
 
 from clickup_agent.cli import main
-from clickup_agent.devlinks import DevPrState, inspect_dev_pr
+from clickup_agent.devlinks import DevPrState, inspect_dev_pr, upsert_pr_body_block
 
 
 def test_dev_pr_found_from_cli(monkeypatch, capsys) -> None:
@@ -117,3 +117,12 @@ def test_dev_pr_no_remote(monkeypatch) -> None:
 
     assert result.state == "no_remote"
     assert result.pr is None
+
+
+def test_pr_body_block_upsert_preserves_human_content() -> None:
+    body = "Intro\n\n<!-- clickup-agent:dev-sync:start -->\nold\n<!-- clickup-agent:dev-sync:end -->\n\nFooter"
+    block = "<!-- clickup-agent:dev-sync:start -->\nnew\n<!-- clickup-agent:dev-sync:end -->"
+
+    updated = upsert_pr_body_block(body, block)
+
+    assert updated == "Intro\n\n<!-- clickup-agent:dev-sync:start -->\nnew\n<!-- clickup-agent:dev-sync:end -->\n\nFooter"
