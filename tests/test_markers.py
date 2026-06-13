@@ -7,9 +7,11 @@ import pytest
 from clickup_agent.markers import (
     DESCRIPTION_END,
     DESCRIPTION_START,
+    DECISION_COMMENT_PREFIX,
     STATUS_COMMENT_PREFIX,
     description_block_survives,
     find_status_comment,
+    render_decision_comment,
     render_description_block,
     render_status_comment,
     upsert_description_block,
@@ -70,6 +72,25 @@ def test_status_comment_detection_uses_visible_prefix() -> None:
     assert comment.startswith(STATUS_COMMENT_PREFIX)
     assert "<!--" not in comment
     assert found == {"id": "sync", "comment_text": comment}
+
+
+def test_decision_comment_uses_append_only_visible_shape() -> None:
+    comment = render_decision_comment(
+        decision="Use sync-checklist for work logs",
+        context="It already handles idempotent item upsert.",
+        alternatives="Write separate checklist logic",
+        source="conversation",
+        pr_url="https://github.com/acme/repo/pull/12",
+        commit="abc123",
+        timestamp="2026-06-13",
+    )
+
+    assert comment.startswith(f"{DECISION_COMMENT_PREFIX} 2026-06-13 - Use sync-checklist for work logs")
+    assert "Decision: Use sync-checklist for work logs" in comment
+    assert "Context: It already handles idempotent item upsert." in comment
+    assert "Alternatives considered: Write separate checklist logic" in comment
+    assert "Source: conversation · Links: https://github.com/acme/repo/pull/12 abc123" in comment
+    assert "<!--" not in comment
 
 
 @pytest.mark.skipif(

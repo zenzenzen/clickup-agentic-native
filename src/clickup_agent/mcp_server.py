@@ -713,6 +713,60 @@ def create_server() -> FastMCP:
             live=live,
         )
 
+    @server.tool()
+    def clickup_agent_work_log(
+        task_id: str,
+        checklist: str | None = None,
+        add_items: list[str] | None = None,
+        checks: list[str] | None = None,
+        custom_task_ids: bool | None = None,
+        team_id: str | None = None,
+        live: bool = False,
+    ) -> dict[str, Any]:
+        """Upsert Action Items or Verification checklist state. Defaults to dry-run."""
+        return _run_mcp_toolchain(
+            "work-log",
+            _payload_without_none(
+                task_id=task_id,
+                checklist=checklist,
+                add_items=add_items,
+                checks=checks,
+                custom_task_ids=custom_task_ids,
+                team_id=team_id,
+            ),
+            live=live,
+        )
+
+    @server.tool()
+    def clickup_agent_decision_log(
+        task_id: str,
+        decision: str,
+        context: str | None = None,
+        alternatives: str | None = None,
+        source: str | None = None,
+        pr_url: str | None = None,
+        commit: str | None = None,
+        custom_task_ids: bool | None = None,
+        team_id: str | None = None,
+        live: bool = False,
+    ) -> dict[str, Any]:
+        """Append a decision record comment. Defaults to dry-run."""
+        return _run_mcp_toolchain(
+            "decision-log",
+            _payload_without_none(
+                task_id=task_id,
+                decision=decision,
+                context=context,
+                alternatives=alternatives,
+                source=source,
+                pr_url=pr_url,
+                commit=commit,
+                custom_task_ids=custom_task_ids,
+                team_id=team_id,
+            ),
+            live=live,
+        )
+
     return server
 
 

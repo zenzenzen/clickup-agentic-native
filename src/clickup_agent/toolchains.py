@@ -24,6 +24,7 @@ from .devsync import (
     build_dev_sync_plan,
 )
 from .markers import upsert_description_block
+from .markers import render_decision_comment
 from .registry import ToolCatalog, ToolOperation, load_catalog, normalize_tool_name
 from .requests import OperationInputError, OperationRequest, build_operation_request
 from .validation import (
@@ -128,6 +129,8 @@ class ToolchainRunner:
             "check-item": _run_check_item,
             "sync-checklist": _run_sync_checklist,
             "dev-sync": _run_dev_sync,
+            "work-log": _run_work_log,
+            "decision-log": _run_decision_log,
             "subtasks": _run_subtasks,
             "tags": _run_tags,
             "timer": _run_timer,
@@ -295,6 +298,20 @@ def _local_wrapper_metadata(name: str) -> dict[str, Any]:
             "name": "dev-sync",
             "summary": "Sync GitHub branch/PR development state into a ClickUp task.",
             "operation_ids": ["GetTask", "GetTaskComments", "UpdateTask", "CreateTaskComment", "UpdateComment", "CreateChecklist", "CreateChecklistItem", "EditChecklistItem"],
+            "is_write": True,
+        }
+    if name == "work-log":
+        return {
+            "name": "work-log",
+            "summary": "Upsert agent action-item or verification checklist state.",
+            "operation_ids": ["GetTask", "CreateChecklist", "CreateChecklistItem", "EditChecklistItem"],
+            "is_write": True,
+        }
+    if name == "decision-log":
+        return {
+            "name": "decision-log",
+            "summary": "Append a decision record comment to a task.",
+            "operation_ids": ["CreateTaskComment"],
             "is_write": True,
         }
     return {"name": name}
@@ -1907,6 +1924,109 @@ def _comments_from_response(response: Any) -> list[Any]:
     if isinstance(response, list):
         return response
     return []
+
+
+def _run_work_log(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_work_log)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["task_id"], context="work-log")
+    task_id = str(payload.pop("task_id"))
+    checklist_key = str(payload.pop("checklist", "action-items"))
+    checklist_name = _work_log_checklist_name(checklist_key)
+    add_items = [str(item) for item in _csv_or_list(payload.pop("add_items", []))]
+    checks = [str(item) for item in _csv_or_list(payload.pop("checks", []))]
+    if not add_items and not checks:
+        raise ToolchainError("work-log requires --add-item or --check")
+    requested_names = list(dict.fromkeys([*add_items, *checks]))
+    requested_items = [{"name": name, "resolved": name in checks} for name in requested_names]
+    base_payload = {
+        "task_id": task_id,
+        **{key: payload.pop(key) for key in ("custom_task_ids", "team_id") if key in payload},
+    }
+
+    operations: list[dict[str, Any]] = []
+    task_operation, task_response = _execute_operation(catalog, "GetTask", base_payload, dry_run=options.dry_run, client=client)
+    operations.append(task_operation)
+    checklist = None if options.dry_run else _find_checklist_by_name(task_response, checklist_name)
+    if checklist is None:
+        create_operation, create_response = _execute_operation(
+            catalog,
+            "CreateChecklist",
+            {**base_payload, "body": {"name": checklist_name}},
+            dry_run=options.dry_run,
+            client=client,
+        )
+        operations.append(create_operation)
+        checklist = _extract_checklist(create_response) if not options.dry_run else {"id": "<created-checklist-id>", "items": []}
+    checklist_id = _id_from(checklist) or "<existing-or-created-checklist-id>"
+    if options.dry_run:
+        item_operations, _ = _create_checklist_items(catalog, checklist_id, requested_items, True, None)
+    else:
+        item_operations, _, _ = _sync_checklist_items(catalog, checklist_id, checklist or {"items": []}, requested_items, client)
+    operations.extend(item_operations)
+    return RunResult(
+        options.name,
+        options.dry_run,
+        operations,
+        {"task_id": task_id, "checklist": checklist_name, "items": requested_items},
+    )
+
+
+def _configure_work_log(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", required=False)
+    parser.add_argument("--checklist", choices=["action-items", "verification"], default=None)
+    parser.add_argument("--add-item", dest="add_items", action="append")
+    parser.add_argument("--check", dest="checks", action="append")
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
+
+
+def _work_log_checklist_name(value: str) -> str:
+    if value == "verification":
+        return "Verification"
+    return "Action Items"
+
+
+def _run_decision_log(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_decision_log)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    _require(payload, ["task_id", "decision"], context="decision-log")
+    task_id = str(payload.pop("task_id"))
+    comment_text = render_decision_comment(
+        decision=str(payload.pop("decision")),
+        context=payload.pop("context", None),
+        alternatives=payload.pop("alternatives", None),
+        source=payload.pop("source", None),
+        pr_url=payload.pop("pr_url", None),
+        commit=payload.pop("commit", None),
+    )
+    base_payload = {
+        "task_id": task_id,
+        **{key: payload.pop(key) for key in ("custom_task_ids", "team_id") if key in payload},
+    }
+    operation, response = _execute_operation(
+        catalog,
+        "CreateTaskComment",
+        {**base_payload, "body": _comment_body(comment_text)},
+        dry_run=options.dry_run,
+        client=client,
+    )
+    normalized_response = {"task_id": task_id, "append_only": True, "decision": comment_text}
+    if not options.dry_run:
+        normalized_response["raw"] = response
+    return RunResult(options.name, options.dry_run, [operation], normalized_response)
+
+
+def _configure_decision_log(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--task-id", required=False)
+    parser.add_argument("--decision")
+    parser.add_argument("--context")
+    parser.add_argument("--alternatives")
+    parser.add_argument("--source", choices=["pr-review", "conversation", "commit"], default=None)
+    parser.add_argument("--pr-url")
+    parser.add_argument("--commit")
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
 
 
 def _parse_checklist_items(
