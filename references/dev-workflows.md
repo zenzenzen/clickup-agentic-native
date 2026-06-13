@@ -111,3 +111,29 @@ The macro creates a completed task with `documentation`, `github`, and `hotfix`
 tags, high priority, PR fields in `markdown_content`, and a resolved `Hotfix
 tracking` checklist. It previews by default; add `--live` only when the task
 should be created.
+
+## GitHub Actions Event Sync
+
+`examples/github-actions-dev-sync.yml` is a reference workflow for repositories
+that want PR events to update ClickUp automatically. Copy it into
+`.github/workflows/` and configure a `CLICKUP_API_KEY` repository secret.
+`CLICKUP_WORKSPACE_ID` is optional unless your task ids require it.
+
+The workflow runs on:
+
+- `pull_request`: opened, edited, synchronize, closed
+- `pull_request_review`: submitted
+
+The review event is separate because GitHub Actions models review submissions as
+`pull_request_review`, not a `pull_request` subtype. Both event paths call the
+same command:
+
+```bash
+clickup-agent run dev-sync --live --mode github-to-clickup ...
+```
+
+The workflow derives a ClickUp task id from the branch prefix and exits
+successfully when no task id can be found. It does not echo the ClickUp token.
+
+ClickUp-to-local webhooks are out of scope for a local CLI. Use `dev audit` as
+the reconciliation path for ClickUp-side drift.

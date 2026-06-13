@@ -1,0 +1,73 @@
+name: ClickUp dev-sync
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - closed
+  pull_request_review:
+    types:
+      - submitted
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dev-sync:
+    runs-on: ubuntu-latest
+    env:
+      CLICKUP_API_KEY: ${{ secrets.CLICKUP_API_KEY }}
+      CLICKUP_WORKSPACE_ID: ${{ secrets.CLICKUP_WORKSPACE_ID }}
+      PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
+      PR_STATE: ${{ github.event.pull_request.merged && 'merged' || github.event.pull_request.state }}
+      PR_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Skip when ClickUp token is unavailable
+        if: ${{ env.CLICKUP_API_KEY == '' }}
+        run: |
+          echo "CLICKUP_API_KEY secret is not configured; skipping dev-sync."
+
+      - name: Check out repository
+        if: ${{ env.CLICKUP_API_KEY != '' }}
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        if: ${{ env.CLICKUP_API_KEY != '' }}
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install clickup-agent
+        if: ${{ env.CLICKUP_API_KEY != '' }}
+        run: uv tool install git+https://github.com/zenzenzen/clickup-agentic-native.git --python 3.12 --reinstall
+
+      - name: Derive ClickUp task id from branch
+        if: ${{ env.CLICKUP_API_KEY != '' }}
+        id: task
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${PR_BRANCH}" =~ (^|/)(86[[:alnum:]]{6,}|[A-Za-z][A-Za-z0-9]+-[0-9]+)([-_/]|$) ]]; then
+            printf 'task_id=%s\n' "${BASH_REMATCH[2]}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "No ClickUp task id prefix found in branch; skipping dev-sync."
+            printf 'task_id=\n' >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Sync GitHub PR state to ClickUp
+        if: ${{ env.CLICKUP_API_KEY != '' && steps.task.outputs.task_id != '' }}
+        run: |
+          clickup-agent run dev-sync \
+            --live \
+            --mode github-to-clickup \
+            --task-id "${{ steps.task.outputs.task_id }}" \
+            --branch "${PR_BRANCH}" \
+            --latest-commit "${PR_SHA}" \
+            --pr-url "${PR_URL}" \
+            --pr-title "${PR_TITLE}" \
+            --pr-number "${PR_NUMBER}" \
+            --pr-state "${PR_STATE}"
