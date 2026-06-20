@@ -55,6 +55,7 @@ Read `../CONTEXT.md` for product intent and `../UBIQUITOUS_LANGUAGE.md` for cano
 - Bootstrap MCP tools:
   - `clickup_agent_status`
   - `clickup_agent_tooling_plan`
+  - `clickup_agent_context_manifest`
   - `clickup_agent_run_operation`
   - `clickup_agent_dev_pr`
 - Direct MCP tools:
@@ -83,6 +84,7 @@ Read `../CONTEXT.md` for product intent and `../UBIQUITOUS_LANGUAGE.md` for cano
   - `clickup_agent_work_log`
   - `clickup_agent_decision_log`
   - `clickup_agent_hotfix_doc`
+  - `clickup_agent_catch_up_docs`
 
 ## CLI Command Shape
 

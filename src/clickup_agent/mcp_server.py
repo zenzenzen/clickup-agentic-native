@@ -19,6 +19,7 @@ from mcp.server.fastmcp import FastMCP
 
 from . import __version__
 from .config import config_status
+from .context_manifest import build_context_manifest
 from .devlinks import inspect_dev_pr
 from .discovery import CURATED_WRAPPERS
 from .registry import load_catalog
@@ -128,6 +129,11 @@ def create_server() -> FastMCP:
         if include_samples:
             plan["sample_operations"] = [_compact_operation(operation) for operation in catalog.operations[:10]]
         return plan
+
+    @server.tool()
+    def clickup_agent_context_manifest() -> dict[str, Any]:
+        """Return the static low-token context manifest of retrievable context surfaces."""
+        return build_context_manifest()
 
     @server.tool()
     def clickup_agent_run_operation(
@@ -793,6 +799,50 @@ def create_server() -> FastMCP:
                 domain_tag=domain_tag,
                 status=status,
                 priority=priority,
+            ),
+            live=live,
+        )
+
+    @server.tool()
+    def clickup_agent_catch_up_docs(
+        mode: str | None = None,
+        task_id: str | None = None,
+        create_task: bool | None = None,
+        list_id: str | None = None,
+        title: str | None = None,
+        summary: str | None = None,
+        branch: str | None = None,
+        pr_url: str | None = None,
+        pr_title: str | None = None,
+        pr_state: str | None = None,
+        validation: list[str] | None = None,
+        changed_files: list[str] | None = None,
+        self_assign: bool | None = None,
+        handoff: bool | None = None,
+        custom_task_ids: bool | None = None,
+        team_id: str | None = None,
+        live: bool = False,
+    ) -> dict[str, Any]:
+        """Plan a documentation catch-up from task/PR/dev context. Defaults to dry-run."""
+        return _run_mcp_toolchain(
+            "catch-up-docs",
+            _payload_without_none(
+                mode=mode,
+                task_id=task_id,
+                create_task=create_task,
+                list_id=list_id,
+                title=title,
+                summary=summary,
+                branch=branch,
+                pr_url=pr_url,
+                pr_title=pr_title,
+                pr_state=pr_state,
+                validation=validation,
+                changed_files=changed_files,
+                self_assign=self_assign,
+                handoff=handoff,
+                custom_task_ids=custom_task_ids,
+                team_id=team_id,
             ),
             live=live,
         )
