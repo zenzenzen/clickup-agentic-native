@@ -1,0 +1,3 @@
+# Ephemeral Context Manifests Outside The Repo
+
+Context loading will be manifest-first, handle-first, and session-scoped, with verbosity steering carried inside the manifest and defaulted to concision. Retrieved context may be cached only outside the repository, must be grouped by a caller-supplied context session id, and must be removable through explicit cleanup with TTL sweeping as a fallback. This deliberately avoids repo-resident generated context so agents can load ClickUp/GitHub/task context cheaply across clients without polluting git state, leaking work artifacts into public files, or reusing stale context across unrelated main task goals.
