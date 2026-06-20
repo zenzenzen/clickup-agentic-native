@@ -91,6 +91,7 @@ clickup-agent run check-item --dry-run --checklist-id chk --item-id item --resol
 clickup-agent run dev-sync --dry-run --task-id abc --branch feature/demo
 clickup-agent run work-log --dry-run --task-id abc --checklist action-items --add-item "Update docs"
 clickup-agent run decision-log --dry-run --task-id abc --decision "Keep wrapper discovery catalog-backed"
+clickup-agent run catch-up-docs --dry-run --branch feature/86abc123-docs --summary "Updated docs"
 clickup-agent run subtasks --dry-run --task-id abc
 clickup-agent run tags --dry-run --task-id abc --add review --remove stale
 clickup-agent run timer --dry-run --action start --team-id 123 --task-id abc
@@ -98,7 +99,7 @@ clickup-agent run hotfix-doc --dry-run --list-id 456 --title "Fix docs" --pr-url
 ```
 
 Bundled operational catch-up movesets include `dev-sync`, `work-log`,
-`decision-log`, branch audit with `dev audit`, and `hotfix-doc`. Use
+`decision-log`, `catch-up-docs`, branch audit with `dev audit`, and `hotfix-doc`. Use
 `clickup-agent onboard` for trigger phrases and examples.
 
 A reference GitHub Actions workflow is available at

@@ -46,6 +46,7 @@ Read `../CONTEXT.md` for product intent and `../UBIQUITOUS_LANGUAGE.md` for cano
 - `clickup-agent run work-log`
 - `clickup-agent run decision-log`
 - `clickup-agent run hotfix-doc`
+- `clickup-agent run catch-up-docs`
 - `clickup-agent run <generated operation name or ID>`
 - `scripts/install.sh` for env file, local install, and Cursor MCP config
 - `scripts/install-skill.sh` for Codex skill discovery
@@ -133,6 +134,7 @@ Agents can call generated operations directly through `clickup-agent run <operat
 - `work-log`: mutable `Action Items` or `Verification` checklist state using non-destructive checklist item convergence
 - `decision-log`: append-only decision record comments using visible `[dev-sync:decision]` markers
 - `hotfix-doc`: completed documentation task creation for a hotfix PR using `CreateTask`, `CreateChecklist`, and `CreateChecklistItem`
+- `catch-up-docs`: dry-run-first documentation catch-up action plan using task/PR/development context and managed sync primitives
 
 ## Still Planned
 

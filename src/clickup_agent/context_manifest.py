@@ -68,7 +68,7 @@ def build_context_manifest() -> dict[str, Any]:
             },
             {
                 "name": "catch-up-docs",
-                "kind": "planned-curated-wrapper",
+                "kind": "curated-wrapper",
                 "command": "clickup-agent run catch-up-docs --dry-run",
                 "summary": "Plan documentation catch-up from current development state.",
             },

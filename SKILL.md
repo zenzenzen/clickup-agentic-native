@@ -54,7 +54,7 @@ The canonical local secret file is `$HOME/.config/clickup-agent/.env`. That is t
 
 ## Current Truth
 
-Implemented today: Python 3.12 CLI, generated ClickUp V2 tool catalog, `tools list` for generated OpenAPI operations, `hotkeys list` for curated wrappers, onboarding aliases, read-only `dev pr` and `dev audit` helpers, task/search/comment/checklist/timer `run` wrappers, compact task fetches, task status discovery, checklist sync, dev sync, work-log, decision-log, and hotfix-doc macro wrappers, generated-operation fallback through `clickup-agent run <operation-id-or-name>`, `doctor --live-auth`, MCP bootstrap/status tools, direct MCP wrappers for the implemented run wrappers, `clickup_agent_run_operation`, Cursor MCP config support, and skill installation.
+Implemented today: Python 3.12 CLI, generated ClickUp V2 tool catalog, `tools list` for generated OpenAPI operations, `hotkeys list` for curated wrappers, onboarding aliases, read-only `dev pr` and `dev audit` helpers, task/search/comment/checklist/timer `run` wrappers, compact task fetches, task status discovery, checklist sync, dev sync, work-log, decision-log, hotfix-doc, and catch-up-docs macro wrappers, generated-operation fallback through `clickup-agent run <operation-id-or-name>`, `doctor --live-auth`, MCP bootstrap/status tools, direct MCP wrappers for the implemented run wrappers, `clickup_agent_run_operation`, Cursor MCP config support, and skill installation.
 
 Planned: broader ClickUp API workflows for docs, users, guests, user groups, lists, attachments, webhooks, admin surfaces, richer entity resolution, and expanded curated wrappers.
 

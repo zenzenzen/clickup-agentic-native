@@ -706,6 +706,106 @@ def test_hotfix_doc_dry_run_creates_task_and_resolved_tracking_checklist(capsys)
     assert payload["response"]["tags"] == ["documentation", "github", "hotfix", "docs"]
 
 
+def test_catch_up_docs_dry_run_infers_task_from_branch(capsys) -> None:
+    assert (
+        main(
+            [
+                "run",
+                "catch-up-docs",
+                "--dry-run",
+                "--branch",
+                "feature/86abc123-docs",
+                "--summary",
+                "Updated docs",
+            ]
+        )
+        == 0
+    )
+
+    payload = _json_output(capsys)
+
+    assert payload["dry_run"] is True
+    assert payload["wrapper"]["name"] == "catch-up-docs"
+    assert payload["operations"][0]["operation_id"] == "GetTask"
+    assert payload["operations"][0]["path"] == "/v2/task/86abc123"
+    assert payload["response"]["target"]["task_id"] == "86abc123"
+    assert payload["response"]["target"]["explicit"] is False
+    assert payload["response"]["action_plan"]["orders"][0]["tool"] == "clickup-agent run get-task"
+
+
+def test_catch_up_docs_missing_task_offers_create_plan(capsys) -> None:
+    assert main(["run", "catch-up-docs", "--dry-run", "--branch", "feature/docs-catchup"]) == 0
+
+    payload = _json_output(capsys)
+    suggestion = payload["response"]["action_plan"]["suggested_create_task"]
+
+    assert payload["operations"] == []
+    assert suggestion["command"] == "clickup-agent run catch-up-docs --dry-run --create-task --list-id <list-id>"
+    assert suggestion["bootstrap"]["branch"] == "feature/docs-catchup"
+    assert suggestion["bootstrap"]["tags"] == ["documentation", "catch-up"]
+
+
+def test_catch_up_docs_create_task_bootstrap_is_dry_run(capsys) -> None:
+    assert (
+        main(
+            [
+                "run",
+                "catch-up-docs",
+                "--dry-run",
+                "--create-task",
+                "--list-id",
+                "123",
+                "--branch",
+                "feature/docs",
+                "--pr-url",
+                "https://github.com/acme/repo/pull/12",
+                "--pr-title",
+                "Docs catch-up",
+                "--summary",
+                "Updated operational docs.",
+                "--validation",
+                "pytest",
+                "--self-assign",
+            ]
+        )
+        == 0
+    )
+
+    payload = _json_output(capsys)
+    create_task = payload["operations"][0]
+    orders = payload["response"]["action_plan"]["orders"]
+
+    assert create_task["operation_id"] == "CreateTask"
+    assert create_task["path"] == "/v2/list/123/task"
+    assert create_task["json"]["name"] == "Docs catch-up"
+    assert create_task["json"]["tags"] == ["documentation", "catch-up", "github"]
+    assert "Updated operational docs." in create_task["json"]["markdown_content"]
+    assert any(order["tool"] == "clickup-agent run assign-me" for order in orders)
+
+
+def test_catch_up_docs_live_requires_explicit_mode_and_target(capsys) -> None:
+    assert main(["run", "catch-up-docs", "--live", "--task-id", "abc"]) == 2
+    output = capsys.readouterr().out
+    assert "requires --mode clickup-only, pr-only, or bidirectional" in output
+
+    assert (
+        main(
+            [
+                "run",
+                "catch-up-docs",
+                "--live",
+                "--mode",
+                "clickup-only",
+                "--branch",
+                "feature/86abc123-docs",
+            ]
+        )
+        == 2
+    )
+    output = capsys.readouterr().out
+    assert "requires explicit --task-id" in output
+
+
 def test_comment_help_cross_references_comments_wrapper(capsys) -> None:
     assert main(["run", "comment", "--help"]) == 0
 

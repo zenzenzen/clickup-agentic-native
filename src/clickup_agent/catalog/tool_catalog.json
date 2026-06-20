@@ -11413,6 +11413,26 @@
     {
       "command_family": "curated_wrappers",
       "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operations GetTask, GetTaskComments, UpdateTask, CreateTask, CreateTaskComment, CreateChecklist, CreateChecklistItem, EditChecklistItem.",
+      "is_write": true,
+      "label": "Curated wrapper commands",
+      "name": "catch-up-docs",
+      "operation_ids": [
+        "GetTask",
+        "GetTaskComments",
+        "UpdateTask",
+        "CreateTask",
+        "CreateTaskComment",
+        "CreateChecklist",
+        "CreateChecklistItem",
+        "EditChecklistItem"
+      ],
+      "source": "curated_wrapper",
+      "summary": "Plan or apply documentation catch-up from current development state."
+    },
+    {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
       "generated_operation_hint": "For full API fields, use generated operation GetTask.",
       "is_write": false,
       "label": "Curated wrapper commands",

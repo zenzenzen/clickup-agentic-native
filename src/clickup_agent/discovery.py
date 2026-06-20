@@ -172,6 +172,21 @@ CURATED_WRAPPERS: tuple[CuratedWrapper, ...] = (
         is_write=True,
     ),
     CuratedWrapper(
+        name="catch-up-docs",
+        summary="Plan or apply documentation catch-up from current development state.",
+        operation_ids=(
+            "GetTask",
+            "GetTaskComments",
+            "UpdateTask",
+            "CreateTask",
+            "CreateTaskComment",
+            "CreateChecklist",
+            "CreateChecklistItem",
+            "EditChecklistItem",
+        ),
+        is_write=True,
+    ),
+    CuratedWrapper(
         name="subtasks",
         summary="Fetch a task with its subtasks expanded.",
         operation_ids=("GetTask",),
