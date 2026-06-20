@@ -14,6 +14,7 @@ from . import __version__
 from .client import ClickUpApiError, ClickUpClient
 from .connect_cmd import run_connect
 from .config import ConfigError, config_status, default_env_file, load_config
+from .context_manifest import build_context_manifest
 from .devlinks import inspect_dev_audit, inspect_dev_pr
 from .registry import ToolOperation, load_catalog
 from .setup_cmd import run_setup
@@ -266,6 +267,11 @@ def _cmd_hotkeys_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_context_manifest(_: argparse.Namespace) -> int:
+    _print_json(build_context_manifest())
+    return 0
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     try:
         result = run_toolchain(args.name, args.tool_args)
@@ -373,6 +379,11 @@ def build_parser() -> argparse.ArgumentParser:
     hotkeys_list = hotkeys_subcommands.add_parser("list", help="List future hotkey toolchains.")
     hotkeys_list.add_argument("--format", choices=["table", "json"], default="table", help="Output format.")
     hotkeys_list.set_defaults(func=_cmd_hotkeys_list)
+
+    context = subcommands.add_parser("context", help="Inspect low-token context loading surfaces.")
+    context_subcommands = context.add_subparsers(dest="context_command", required=True)
+    context_manifest = context_subcommands.add_parser("manifest", help="Print the static context manifest.")
+    context_manifest.set_defaults(func=_cmd_context_manifest)
 
     run = subcommands.add_parser("run", help="Run a future hotkey or toolchain.")
     run.add_argument("name", help="Hotkey or toolchain name.")

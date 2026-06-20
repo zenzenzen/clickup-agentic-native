@@ -17,6 +17,7 @@ Read `../CONTEXT.md` for product intent and `../UBIQUITOUS_LANGUAGE.md` for cano
 - `clickup-agent tools list [--format table|json] [--tag <tag>] [--write-only]`
 - `clickup-agent tools find <query...> [--format table|json]`
 - `clickup-agent hotkeys list [--format table|json]`
+- `clickup-agent context manifest`
 - `clickup-agent dev pr`
 - `clickup-agent dev audit`
 - `clickup-agent run search`

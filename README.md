@@ -42,15 +42,17 @@ clickup-agent chat
 clickup-agent onboard
 clickup-agent tools list
 clickup-agent hotkeys list
+clickup-agent context manifest
 clickup-agent run <curated-wrapper-or-generated-operation>
 clickup-agent doctor
 ```
 
-Discovery commands are backed by a committed catalog generated from ClickUp's official V2 OpenAPI spec. `tools list` shows raw/generated OpenAPI operations; `hotkeys list` shows curated wrapper commands:
+Discovery commands are backed by a committed catalog generated from ClickUp's official V2 OpenAPI spec. `tools list` shows raw/generated OpenAPI operations; `hotkeys list` shows curated wrapper commands; `context manifest` shows low-token context surfaces, pinned actions, and catch-up action templates:
 
 ```bash
 clickup-agent tools list --tag Tasks --write-only
 clickup-agent hotkeys list --format json
+clickup-agent context manifest
 ```
 
 If a curated hotkey is not available yet, agents can run any generated operation by operation ID or catalog name through the same dry-run/live safety rail:
