@@ -20,6 +20,7 @@ from mcp.server.fastmcp import FastMCP
 from . import __version__
 from .config import config_status
 from .devlinks import inspect_dev_pr
+from .discovery import CURATED_WRAPPERS
 from .registry import load_catalog
 from .toolchains import ToolchainError, ToolchainRunner
 
@@ -54,6 +55,15 @@ def _compact_operation(operation: Any) -> dict[str, Any]:
         "tags": list(operation.tags),
         "write": operation.is_write,
         "summary": operation.summary,
+    }
+
+
+def _compact_toolchain(toolchain: Any) -> dict[str, Any]:
+    """Expose enough curated-wrapper context for planning without long operation lists."""
+    return {
+        "name": toolchain.name,
+        "write": toolchain.is_write,
+        "summary": toolchain.summary,
     }
 
 
@@ -105,35 +115,13 @@ def create_server() -> FastMCP:
             "implemented_commands": [
                 "clickup-agent tools list (generated OpenAPI operations)",
                 "clickup-agent hotkeys list (curated wrappers)",
-                "clickup-agent run search",
-                "clickup-agent run list-hierarchy",
-                "clickup-agent run get-task",
-                "clickup-agent run task-statuses",
-                "clickup-agent run create-task",
-                "clickup-agent run create-subtask",
-                "clickup-agent run set-status",
-                "clickup-agent run set-description",
-                "clickup-agent run update-task",
-                "clickup-agent run assign",
-                "clickup-agent run assign-me",
-                "clickup-agent run set-due-date",
-                "clickup-agent run comment",
-                "clickup-agent run edit-comment",
-                "clickup-agent run create-checklist",
-                "clickup-agent run create-checklist-item",
-                "clickup-agent run check-item",
-                "clickup-agent run sync-checklist",
-                "clickup-agent run dev-sync",
-                "clickup-agent run hotfix-doc",
+                *[f"clickup-agent run {wrapper.name}" for wrapper in CURATED_WRAPPERS],
                 "clickup-agent dev pr",
                 "clickup-agent dev audit",
-                "clickup-agent run subtasks",
-                "clickup-agent run tags",
-                "clickup-agent run timer",
                 "clickup-agent run <generated operation name or ID>",
             ],
             "hotkeys": [
-                toolchain.to_dict()
+                _compact_toolchain(toolchain)
                 for toolchain in catalog.toolchains
             ],
         }

@@ -15,7 +15,7 @@ from typing import Any, Callable
 
 from .client import ClickUpApiError, ClickUpClient
 from .config import ConfigError, load_workspace_id
-from .devlinks import render_pr_body_block, write_pr_body_block
+from .devlinks import guess_clickup_task_id, render_pr_body_block, write_pr_body_block
 from .devsync import (
     DEVELOPMENT_SYNC_CHECKLIST,
     ClickUpTaskContext,
@@ -24,6 +24,7 @@ from .devsync import (
     GitRepositoryContext,
     build_dev_sync_plan,
 )
+from .discovery import CURATED_WRAPPERS_BY_NAME
 from .markers import upsert_description_block
 from .markers import render_decision_comment
 from .registry import ToolCatalog, ToolOperation, load_catalog, normalize_tool_name
@@ -133,6 +134,7 @@ class ToolchainRunner:
             "work-log": _run_work_log,
             "decision-log": _run_decision_log,
             "hotfix-doc": _run_hotfix_doc,
+            "catch-up-docs": _run_catch_up_docs,
             "subtasks": _run_subtasks,
             "tags": _run_tags,
             "timer": _run_timer,
@@ -288,42 +290,8 @@ def run_toolchain(name: str, argv: list[str]) -> RunResult:
 
 
 def _local_wrapper_metadata(name: str) -> dict[str, Any]:
-    if name == "comments":
-        return {
-            "name": "comments",
-            "summary": "List or add task comments.",
-            "operation_ids": ["GetTaskComments", "CreateTaskComment"],
-            "is_write": True,
-        }
-    if name == "dev-sync":
-        return {
-            "name": "dev-sync",
-            "summary": "Sync GitHub branch/PR development state into a ClickUp task.",
-            "operation_ids": ["GetTask", "GetTaskComments", "UpdateTask", "CreateTaskComment", "UpdateComment", "CreateChecklist", "CreateChecklistItem", "EditChecklistItem"],
-            "is_write": True,
-        }
-    if name == "work-log":
-        return {
-            "name": "work-log",
-            "summary": "Upsert agent action-item or verification checklist state.",
-            "operation_ids": ["GetTask", "CreateChecklist", "CreateChecklistItem", "EditChecklistItem"],
-            "is_write": True,
-        }
-    if name == "decision-log":
-        return {
-            "name": "decision-log",
-            "summary": "Append a decision record comment to a task.",
-            "operation_ids": ["CreateTaskComment"],
-            "is_write": True,
-        }
-    if name == "hotfix-doc":
-        return {
-            "name": "hotfix-doc",
-            "summary": "Create a completed documentation task for a merged hotfix PR.",
-            "operation_ids": ["CreateTask", "CreateChecklist", "CreateChecklistItem"],
-            "is_write": True,
-        }
-    return {"name": name}
+    wrapper = CURATED_WRAPPERS_BY_NAME.get(name)
+    return wrapper.to_dict() if wrapper is not None else {"name": name}
 
 
 def _compact_operation_metadata(operation: ToolOperation) -> dict[str, Any]:
@@ -1924,6 +1892,295 @@ def _configure_dev_sync(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--pr-title-prefix")
     parser.add_argument("--custom-task-ids", action="store_true", default=None)
     parser.add_argument("--team-id")
+
+
+def _run_catch_up_docs(options: RunOptions, catalog: ToolCatalog, client: ClickUpClient | None) -> RunResult:
+    flag_payload = _parse_tool_args(options.name, options.flag_payload["_argv"], _configure_catch_up_docs)
+    payload = merge_inputs(options.json_payload, flag_payload)
+    mode = payload.pop("mode", None)
+    create_task = _bool(payload.pop("create_task"), field="create_task") if "create_task" in payload else False
+    self_assign = _bool(payload.pop("self_assign"), field="self_assign") if "self_assign" in payload else False
+    handoff = _bool(payload.pop("handoff"), field="handoff") if "handoff" in payload else False
+    task_id = payload.get("task_id")
+    explicit_task_id = bool(task_id)
+    branch = payload.get("branch") or payload.get("pr_branch")
+    inferred_task_id = guess_clickup_task_id(str(branch)) if branch else None
+    if not task_id and inferred_task_id and options.dry_run and not create_task:
+        task_id = inferred_task_id
+        payload["task_id"] = task_id
+
+    if options.live:
+        if mode not in {"clickup-only", "pr-only", "bidirectional"}:
+            raise ToolchainError("catch-up-docs --live requires --mode clickup-only, pr-only, or bidirectional")
+        if not explicit_task_id and not create_task:
+            raise ToolchainError("catch-up-docs --live requires explicit --task-id or --create-task --list-id")
+        if create_task and not payload.get("list_id"):
+            raise ToolchainError("catch-up-docs --create-task requires --list-id")
+        if mode in {"pr-only", "bidirectional"} and not payload.get("pr_url"):
+            raise ToolchainError("catch-up-docs --mode pr-only/bidirectional requires --pr-url")
+
+    operations: list[dict[str, Any]] = []
+    decisions: list[str] = []
+    if inferred_task_id and not explicit_task_id:
+        decisions.append(f"candidate task id '{inferred_task_id}' inferred from branch '{branch}' for dry-run planning")
+    if mode is None:
+        decisions.append("no live write topology selected; plan only")
+    if handoff:
+        decisions.append("handoff note requested; comments remain explicit")
+
+    action_plan = _catch_up_docs_action_plan(
+        payload,
+        mode=mode,
+        task_id=str(task_id) if task_id else None,
+        inferred_task_id=inferred_task_id,
+        create_task=create_task,
+        self_assign=self_assign,
+        handoff=handoff,
+        decisions=decisions,
+    )
+
+    if create_task:
+        create_payload = _catch_up_docs_create_task_payload(payload, self_assign=self_assign)
+        create_operation, create_response = _execute_operation(
+            catalog,
+            "CreateTask",
+            create_payload,
+            dry_run=options.dry_run,
+            client=client,
+        )
+        operations.append(create_operation)
+        if not options.dry_run:
+            task_id = _id_from(create_response if isinstance(create_response, dict) else None)
+            if task_id is None:
+                raise ToolchainError("CreateTask response did not include a task id for catch-up-docs")
+            payload["task_id"] = task_id
+
+    if task_id and not create_task:
+        task_operation, _ = _execute_operation(
+            catalog,
+            "GetTask",
+            _task_lookup_payload(payload),
+            dry_run=options.dry_run,
+            client=client,
+        )
+        operations.append(task_operation)
+
+    if task_id and mode in {"clickup-only", "pr-only", "bidirectional"}:
+        dev_sync_result = _run_dev_sync(
+            _catch_up_docs_dev_sync_options(options, payload, str(task_id), str(mode)),
+            catalog,
+            client,
+        )
+        operations.extend(dev_sync_result.operations)
+        action_plan["delegated_response"] = dev_sync_result.response
+
+    response = {
+        "intent": "catch-up-docs",
+        "target": {
+            "task_id": str(task_id) if task_id else None,
+            "explicit": explicit_task_id,
+            "inferred_from_branch": inferred_task_id if inferred_task_id and not explicit_task_id else None,
+        },
+        "mode": mode or "plan-only",
+        "action_plan": action_plan,
+    }
+    return RunResult(options.name, options.dry_run, operations, response)
+
+
+def _configure_catch_up_docs(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--mode", choices=["clickup-only", "pr-only", "bidirectional"], default=None)
+    parser.add_argument("--task-id", required=False)
+    parser.add_argument("--create-task", action="store_true", default=None)
+    parser.add_argument("--list-id")
+    parser.add_argument("--title")
+    parser.add_argument("--summary")
+    parser.add_argument("--branch")
+    parser.add_argument("--pr-url")
+    parser.add_argument("--pr-title")
+    parser.add_argument("--pr-state")
+    parser.add_argument("--validation", action="append")
+    parser.add_argument("--changed-file", dest="changed_files", action="append")
+    parser.add_argument("--self-assign", action="store_true", default=None)
+    parser.add_argument("--handoff", action="store_true", default=None)
+    parser.add_argument("--custom-task-ids", action="store_true", default=None)
+    parser.add_argument("--team-id")
+
+
+def _catch_up_docs_action_plan(
+    payload: dict[str, Any],
+    *,
+    mode: Any,
+    task_id: str | None,
+    inferred_task_id: str | None,
+    create_task: bool,
+    self_assign: bool,
+    handoff: bool,
+    decisions: list[str],
+) -> dict[str, Any]:
+    orders: list[dict[str, Any]] = []
+    if task_id:
+        orders.append(
+            {
+                "tool": "clickup-agent run get-task",
+                "arguments": {"task_id": task_id, "summary": True},
+                "purpose": "load compact ClickUp Task context",
+            }
+        )
+    if create_task:
+        orders.append(
+            {
+                "tool": "clickup-agent run create-task",
+                "arguments": {
+                    key: value
+                    for key, value in {
+                        "list_id": payload.get("list_id"),
+                        "name": payload.get("title") or payload.get("pr_title") or payload.get("branch") or "Catch up docs",
+                        "tags": ["documentation", "catch-up", *(["github"] if payload.get("pr_url") else [])],
+                    }.items()
+                    if value is not None
+                },
+                "purpose": "create an explicit target Task for documentation catch-up",
+            }
+        )
+        if self_assign:
+            orders.append(
+                {
+                    "tool": "clickup-agent run assign-me",
+                    "arguments": {"task_id": "<created-task-id>"},
+                    "purpose": "self-assign the created Task when the authorized user resolves safely",
+                }
+            )
+    if task_id and mode:
+        orders.append(
+            {
+                "tool": "clickup-agent run dev-sync",
+                "arguments": _catch_up_docs_dev_sync_payload(payload, task_id, str(mode)),
+                "purpose": "reuse managed development sync instead of a parallel sync engine",
+            }
+        )
+    if payload.get("validation"):
+        orders.append(
+            {
+                "tool": "clickup-agent run work-log",
+                "arguments": {
+                    "task_id": task_id or "<created-task-id>",
+                    "checklist": "verification",
+                    "add_item": payload.get("validation"),
+                },
+                "purpose": "sync detected validation into the managed Verification checklist",
+            }
+        )
+    if handoff:
+        orders.append(
+            {
+                "tool": "clickup-agent run decision-log",
+                "arguments": {"task_id": task_id or "<created-task-id>", "decision": "Handoff prepared"},
+                "purpose": "append an explicit handoff note only when requested",
+            }
+        )
+    if not orders:
+        decisions.append("no target Task found; offer --create-task --list-id to bootstrap a Task")
+    return {
+        "decisions": decisions,
+        "orders": orders,
+        "safety": [
+            "dry-run before live writes",
+            "live writes require explicit task target or explicit task creation",
+            "live writes require explicit write topology",
+            "managed blocks/checklists only; no arbitrary checklist rewrites",
+        ],
+        "suggested_create_task": None if task_id or create_task else _catch_up_docs_create_task_suggestion(payload, inferred_task_id),
+    }
+
+
+def _catch_up_docs_create_task_suggestion(payload: dict[str, Any], inferred_task_id: str | None) -> dict[str, Any]:
+    return {
+        "command": "clickup-agent run catch-up-docs --dry-run --create-task --list-id <list-id>",
+        "reason": "No unambiguous ClickUp Task target was found.",
+        "candidate_task_id": inferred_task_id,
+        "bootstrap": {
+            "title": payload.get("title") or payload.get("pr_title") or payload.get("branch") or "Catch up docs",
+            "branch": payload.get("branch"),
+            "pr_url": payload.get("pr_url"),
+            "pr_title": payload.get("pr_title"),
+            "pr_state": payload.get("pr_state"),
+            "summary": payload.get("summary"),
+            "tags": ["documentation", "catch-up", *(["github"] if payload.get("pr_url") else [])],
+            "action_items": ["review generated catch-up", "confirm linked PR/task"],
+            "verification": list(_csv_or_list(payload.get("validation"))),
+        },
+    }
+
+
+def _catch_up_docs_create_task_payload(payload: dict[str, Any], *, self_assign: bool) -> dict[str, Any]:
+    _require(payload, ["list_id"], context="catch-up-docs --create-task")
+    title = payload.get("title") or payload.get("pr_title") or payload.get("branch") or "Catch up docs"
+    body = {
+        "list_id": payload["list_id"],
+        "name": title,
+        "markdown_content": _catch_up_docs_markdown(payload),
+        "tags": ["documentation", "catch-up", *(["github"] if payload.get("pr_url") else [])],
+    }
+    if self_assign:
+        body["description"] = "Self-assignment requested; run assign-me after creation when the task id is known."
+    return body
+
+
+def _catch_up_docs_markdown(payload: dict[str, Any]) -> str:
+    lines = [f"# {payload.get('title') or payload.get('pr_title') or payload.get('branch') or 'Catch up docs'}", ""]
+    if payload.get("summary"):
+        lines.extend(["## Development summary", str(payload["summary"]), ""])
+    if payload.get("branch"):
+        lines.append(f"- Branch: {payload['branch']}")
+    if payload.get("pr_url"):
+        lines.append(f"- PR: {payload['pr_url']}")
+    if payload.get("pr_title"):
+        lines.append(f"- PR title: {payload['pr_title']}")
+    if payload.get("pr_state"):
+        lines.append(f"- PR state: {payload['pr_state']}")
+    changed_files = _csv_or_list(payload.get("changed_files"))
+    if changed_files:
+        lines.extend(["", "## Changed files", *[f"- {item}" for item in changed_files]])
+    validation = _csv_or_list(payload.get("validation"))
+    if validation:
+        lines.extend(["", "## Validation", *[f"- {item}" for item in validation]])
+    return "\n".join(lines).strip()
+
+
+def _catch_up_docs_dev_sync_options(options: RunOptions, payload: dict[str, Any], task_id: str, mode: str) -> RunOptions:
+    argv: list[str] = ["--task-id", task_id, "--mode", _catch_up_docs_dev_sync_mode(mode)]
+    for payload_key, flag in (
+        ("branch", "--branch"),
+        ("pr_url", "--pr-url"),
+        ("pr_title", "--pr-title"),
+        ("pr_state", "--pr-state"),
+    ):
+        if payload.get(payload_key):
+            argv.extend([flag, str(payload[payload_key])])
+    return RunOptions(
+        name="dev-sync",
+        requested_name="dev-sync",
+        json_payload={},
+        flag_payload={"_argv": argv},
+        dry_run=options.dry_run,
+        live=options.live,
+    )
+
+
+def _catch_up_docs_dev_sync_payload(payload: dict[str, Any], task_id: str, mode: str) -> dict[str, Any]:
+    data: dict[str, Any] = {"task_id": task_id, "mode": _catch_up_docs_dev_sync_mode(mode)}
+    for key in ("branch", "pr_url", "pr_title", "pr_state"):
+        if payload.get(key):
+            data[key] = payload[key]
+    return data
+
+
+def _catch_up_docs_dev_sync_mode(mode: str) -> str:
+    return {
+        "clickup-only": "github-to-clickup",
+        "pr-only": "clickup-to-github",
+        "bidirectional": "bidirectional",
+    }[mode]
 
 
 def _dev_sync_input(task_id: str, payload: dict[str, Any]) -> DevSyncInput:

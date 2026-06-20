@@ -14,12 +14,16 @@ The product goal is to make ClickUp feel like a native operational layer: agents
 
 ## Product Shape
 
-`clickup-agent` exposes two command families:
+For ClickUp API execution, `clickup-agent run` exposes two command families:
 
 - **Curated wrappers** are kebab-case commands for common workflows, such as `update-task`, `get-task`, `task-statuses`, `create-checklist`, and `sync-checklist`.
 - **Generated OpenAPI operations** are raw ClickUp V2 operations from the committed catalog, such as `UpdateTask`, `GetTask`, and `CreateChecklist`.
 
 Exact PascalCase OpenAPI operation IDs should run generated operations. Kebab-case names should run curated wrappers when a wrapper exists. When a wrapper cannot express a needed ClickUp field, agents should use the generated operation escape hatch and keep dry-run/live safety behavior intact.
+
+Context loading should use a top-level `context` namespace with compact context manifests: agents see a small map of retrievable context surfaces and fetch only the slices they need. Retrieved context must not be written into the repository; any session cache belongs outside the repo and must be cleaned up when the main task goal completes, when the session ends, or when the operator says no further ClickUp access is needed.
+
+When agents need to act through MCP, they should form an MCP action plan first: a compact ordered list of intended tool calls and decisions, then issue those calls deliberately with dry-run-before-live safety visible.
 
 ## Safety And Trust
 

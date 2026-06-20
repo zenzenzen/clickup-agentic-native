@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from clickup_agent.cli import main
+from clickup_agent.discovery import CURATED_WRAPPER_NAMES
 
 
 def test_tools_list_json_filters_by_tag(capsys) -> None:
@@ -42,20 +43,7 @@ def test_hotkeys_list_json_includes_curated_toolchains(capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     names = {hotkey["name"] for hotkey in payload["hotkeys"]}
 
-    assert {
-        "search",
-        "get-task",
-        "task-statuses",
-        "create-task",
-        "set-status",
-        "assign",
-        "set-due-date",
-        "comment",
-        "create-checklist",
-        "sync-checklist",
-        "tags",
-        "timer",
-    } <= names
+    assert names == CURATED_WRAPPER_NAMES
 
 
 def test_hotkeys_list_table_labels_curated_wrappers(capsys) -> None:
