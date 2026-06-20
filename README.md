@@ -80,19 +80,24 @@ clickup-agent run assign --dry-run --task-id abc --assignee 182 --mode add
 clickup-agent run assign-me --dry-run --task-id abc
 clickup-agent run set-due-date --dry-run --task-id abc --due-date 2026-05-01
 clickup-agent run comment --dry-run --task-id abc --text "PR is ready"
+clickup-agent run comments --dry-run --task-id abc --list
 clickup-agent run edit-comment --dry-run --comment-id 123 --text "Updated" --assignee 182 --resolved
 clickup-agent run create-checklist --dry-run --task-id abc --name "Launch" --items checklist.json --resolved
 clickup-agent run sync-checklist --dry-run --task-id abc --name "Launch" --items checklist.json --resolve-all
 clickup-agent run create-checklist-item --dry-run --checklist-id chk --name "Verify" --assignee 182
 clickup-agent run check-item --dry-run --checklist-id chk --item-id item --resolved
+clickup-agent run dev-sync --dry-run --task-id abc --branch feature/demo
+clickup-agent run work-log --dry-run --task-id abc --checklist action-items --add-item "Update docs"
+clickup-agent run decision-log --dry-run --task-id abc --decision "Keep wrapper discovery catalog-backed"
 clickup-agent run subtasks --dry-run --task-id abc
 clickup-agent run tags --dry-run --task-id abc --add review --remove stale
 clickup-agent run timer --dry-run --action start --team-id 123 --task-id abc
 clickup-agent run hotfix-doc --dry-run --list-id 456 --title "Fix docs" --pr-url https://github.com/org/repo/pull/1 --problem "What broke" --fix "What changed"
 ```
 
-Bundled macro movesets include `dev-sync`, branch audit with `dev audit`, and
-`hotfix-doc`. Use `clickup-agent onboard` for trigger phrases and examples.
+Bundled operational catch-up movesets include `dev-sync`, `work-log`,
+`decision-log`, branch audit with `dev audit`, and `hotfix-doc`. Use
+`clickup-agent onboard` for trigger phrases and examples.
 
 A reference GitHub Actions workflow is available at
 `examples/github-actions-dev-sync.yml`. Copy it into `.github/workflows/` when a

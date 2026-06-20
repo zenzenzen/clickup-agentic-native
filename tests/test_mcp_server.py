@@ -7,6 +7,7 @@ import httpx
 
 from clickup_agent.client import ClickUpClient
 from clickup_agent.config import ClickUpConfig
+from clickup_agent.discovery import CURATED_WRAPPER_NAMES
 from clickup_agent.mcp_server import _run_mcp_toolchain, create_server
 
 
@@ -77,11 +78,14 @@ def test_mcp_tooling_plan_labels_generated_operations_and_curated_wrappers() -> 
 
     commands = set(plan["implemented_commands"])
 
-    assert "clickup-agent tools list (generated OpenAPI operations)" in commands
-    assert "clickup-agent hotkeys list (curated wrappers)" in commands
-    assert "clickup-agent run get-task" in commands
-    assert "clickup-agent run task-statuses" in commands
-    assert "clickup-agent run sync-checklist" in commands
+    assert commands == {
+        "clickup-agent tools list (generated OpenAPI operations)",
+        "clickup-agent hotkeys list (curated wrappers)",
+        *(f"clickup-agent run {name}" for name in CURATED_WRAPPER_NAMES),
+        "clickup-agent dev pr",
+        "clickup-agent dev audit",
+        "clickup-agent run <generated operation name or ID>",
+    }
 
 
 def test_mcp_tooling_plan_uses_compact_operation_samples_when_requested() -> None:

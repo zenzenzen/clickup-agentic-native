@@ -12,6 +12,13 @@ from urllib.parse import unquote
 from pathlib import Path
 from typing import Any
 
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
+from clickup_agent.discovery import curated_wrapper_dicts  # noqa: E402
+
 SOURCE_URL = "https://developer.clickup.com/openapi/clickup-api-v2-reference.json"
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
 WRITE_METHODS = {"post", "put", "patch", "delete"}
@@ -40,136 +47,6 @@ COMMAND_FAMILIES = {
         "run_note": "Kebab-case names such as update-task run curated wrappers with CLI-friendly flags.",
     },
 }
-
-TOOLCHAINS = [
-    {
-        "name": "search",
-        "summary": "Search and filter tasks across a workspace or list.",
-        "operation_ids": ["GetFilteredTeamTasks", "GetTasks"],
-        "is_write": False,
-    },
-    {
-        "name": "list-hierarchy",
-        "summary": "List workspace, space, folder, and list names and IDs.",
-        "operation_ids": ["GetAuthorizedTeams", "GetSpaces", "GetFolders", "GetLists", "GetFolderlessLists"],
-        "is_write": False,
-    },
-    {
-        "name": "create-task",
-        "summary": "Create a task in a ClickUp list.",
-        "operation_ids": ["CreateTask"],
-        "is_write": True,
-    },
-    {
-        "name": "create-subtask",
-        "summary": "Create a subtask under a parent task.",
-        "operation_ids": ["CreateTask"],
-        "is_write": True,
-    },
-    {
-        "name": "set-status",
-        "summary": "Update a task status with wrapper status validation.",
-        "operation_ids": ["UpdateTask"],
-        "is_write": True,
-    },
-    {
-        "name": "task-statuses",
-        "summary": "Discover valid statuses for a task or list.",
-        "operation_ids": ["GetTask", "GetList"],
-        "is_write": False,
-    },
-    {
-        "name": "set-description",
-        "summary": "Update a task description, preferring markdown_content for rich formatting.",
-        "operation_ids": ["UpdateTask"],
-        "is_write": True,
-    },
-    {
-        "name": "update-task",
-        "summary": "Update common task fields, including status validation.",
-        "operation_ids": ["UpdateTask"],
-        "is_write": True,
-    },
-    {
-        "name": "get-task",
-        "summary": "Fetch a task with optional summary or field projection output.",
-        "operation_ids": ["GetTask"],
-        "is_write": False,
-    },
-    {
-        "name": "assign",
-        "summary": "Add, remove, or replace task assignees.",
-        "operation_ids": ["GetTask", "UpdateTask"],
-        "is_write": True,
-    },
-    {
-        "name": "assign-me",
-        "summary": "Assign the authorized user to a task.",
-        "operation_ids": ["GetAuthorizedUser", "UpdateTask"],
-        "is_write": True,
-    },
-    {
-        "name": "set-due-date",
-        "summary": "Set or clear a task due date.",
-        "operation_ids": ["UpdateTask"],
-        "is_write": True,
-    },
-    {
-        "name": "comment",
-        "summary": "Add a comment to a task.",
-        "operation_ids": ["CreateTaskComment"],
-        "is_write": True,
-    },
-    {
-        "name": "edit-comment",
-        "summary": "Edit an existing comment.",
-        "operation_ids": ["UpdateComment"],
-        "is_write": True,
-    },
-    {
-        "name": "create-checklist",
-        "summary": "Create a checklist on a task, optionally with initial items.",
-        "operation_ids": ["CreateChecklist"],
-        "is_write": True,
-    },
-    {
-        "name": "sync-checklist",
-        "summary": "Create or update checklist items from a non-destructive item list.",
-        "operation_ids": ["GetTask", "CreateChecklist", "CreateChecklistItem", "EditChecklistItem"],
-        "is_write": True,
-    },
-    {
-        "name": "create-checklist-item",
-        "summary": "Add an item to a checklist.",
-        "operation_ids": ["CreateChecklistItem"],
-        "is_write": True,
-    },
-    {
-        "name": "check-item",
-        "summary": "Edit a checklist item (resolve, rename, reparent, reassign).",
-        "operation_ids": ["EditChecklistItem"],
-        "is_write": True,
-    },
-    {
-        "name": "subtasks",
-        "summary": "Fetch a task with its subtasks expanded.",
-        "operation_ids": ["GetTask"],
-        "is_write": False,
-    },
-    {
-        "name": "tags",
-        "summary": "Add or remove tags on a task.",
-        "operation_ids": ["AddTagToTask", "RemoveTagFromTask"],
-        "is_write": True,
-    },
-    {
-        "name": "timer",
-        "summary": "Inspect, start, or stop the running timer.",
-        "operation_ids": ["Getrunningtimeentry", "StartatimeEntry", "StopatimeEntry"],
-        "is_write": True,
-    },
-]
-
 
 def normalize_toolchain(toolchain: dict[str, Any]) -> dict[str, Any]:
     enriched = dict(toolchain)
@@ -349,7 +226,7 @@ def normalize_catalog(spec: dict[str, Any], source_url: str) -> dict[str, Any]:
         "source_version": str(spec.get("info", {}).get("version", "")),
         "command_families": COMMAND_FAMILIES,
         "operations": sorted(operations, key=lambda item: (item["tags"], item["name"])),
-        "toolchains": [normalize_toolchain(toolchain) for toolchain in TOOLCHAINS],
+        "toolchains": [normalize_toolchain(toolchain) for toolchain in curated_wrapper_dicts()],
     }
 
 

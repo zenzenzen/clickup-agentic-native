@@ -24,6 +24,7 @@ from .devsync import (
     GitRepositoryContext,
     build_dev_sync_plan,
 )
+from .discovery import CURATED_WRAPPERS_BY_NAME
 from .markers import upsert_description_block
 from .markers import render_decision_comment
 from .registry import ToolCatalog, ToolOperation, load_catalog, normalize_tool_name
@@ -288,42 +289,8 @@ def run_toolchain(name: str, argv: list[str]) -> RunResult:
 
 
 def _local_wrapper_metadata(name: str) -> dict[str, Any]:
-    if name == "comments":
-        return {
-            "name": "comments",
-            "summary": "List or add task comments.",
-            "operation_ids": ["GetTaskComments", "CreateTaskComment"],
-            "is_write": True,
-        }
-    if name == "dev-sync":
-        return {
-            "name": "dev-sync",
-            "summary": "Sync GitHub branch/PR development state into a ClickUp task.",
-            "operation_ids": ["GetTask", "GetTaskComments", "UpdateTask", "CreateTaskComment", "UpdateComment", "CreateChecklist", "CreateChecklistItem", "EditChecklistItem"],
-            "is_write": True,
-        }
-    if name == "work-log":
-        return {
-            "name": "work-log",
-            "summary": "Upsert agent action-item or verification checklist state.",
-            "operation_ids": ["GetTask", "CreateChecklist", "CreateChecklistItem", "EditChecklistItem"],
-            "is_write": True,
-        }
-    if name == "decision-log":
-        return {
-            "name": "decision-log",
-            "summary": "Append a decision record comment to a task.",
-            "operation_ids": ["CreateTaskComment"],
-            "is_write": True,
-        }
-    if name == "hotfix-doc":
-        return {
-            "name": "hotfix-doc",
-            "summary": "Create a completed documentation task for a merged hotfix PR.",
-            "operation_ids": ["CreateTask", "CreateChecklist", "CreateChecklistItem"],
-            "is_write": True,
-        }
-    return {"name": name}
+    wrapper = CURATED_WRAPPERS_BY_NAME.get(name)
+    return wrapper.to_dict() if wrapper is not None else {"name": name}
 
 
 def _compact_operation_metadata(operation: ToolOperation) -> dict[str, Any]:

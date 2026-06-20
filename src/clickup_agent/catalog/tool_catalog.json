@@ -11121,6 +11121,33 @@
     {
       "command_family": "curated_wrappers",
       "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operation GetTask.",
+      "is_write": false,
+      "label": "Curated wrapper commands",
+      "name": "get-task",
+      "operation_ids": [
+        "GetTask"
+      ],
+      "source": "curated_wrapper",
+      "summary": "Fetch a task with optional summary or field projection output."
+    },
+    {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operations GetTask, GetList.",
+      "is_write": false,
+      "label": "Curated wrapper commands",
+      "name": "task-statuses",
+      "operation_ids": [
+        "GetTask",
+        "GetList"
+      ],
+      "source": "curated_wrapper",
+      "summary": "Discover valid statuses for a task or list."
+    },
+    {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
       "generated_operation_hint": "For full API fields, use generated operation CreateTask.",
       "is_write": true,
       "label": "Curated wrapper commands",
@@ -11160,20 +11187,6 @@
     {
       "command_family": "curated_wrappers",
       "family": "curated_wrappers",
-      "generated_operation_hint": "For full API fields, use generated operations GetTask, GetList.",
-      "is_write": false,
-      "label": "Curated wrapper commands",
-      "name": "task-statuses",
-      "operation_ids": [
-        "GetTask",
-        "GetList"
-      ],
-      "source": "curated_wrapper",
-      "summary": "Discover valid statuses for a task or list."
-    },
-    {
-      "command_family": "curated_wrappers",
-      "family": "curated_wrappers",
       "generated_operation_hint": "For full API fields, use generated operation UpdateTask.",
       "is_write": true,
       "label": "Curated wrapper commands",
@@ -11196,19 +11209,6 @@
       ],
       "source": "curated_wrapper",
       "summary": "Update common task fields, including status validation."
-    },
-    {
-      "command_family": "curated_wrappers",
-      "family": "curated_wrappers",
-      "generated_operation_hint": "For full API fields, use generated operation GetTask.",
-      "is_write": false,
-      "label": "Curated wrapper commands",
-      "name": "get-task",
-      "operation_ids": [
-        "GetTask"
-      ],
-      "source": "curated_wrapper",
-      "summary": "Fetch a task with optional summary or field projection output."
     },
     {
       "command_family": "curated_wrappers",
@@ -11262,7 +11262,21 @@
         "CreateTaskComment"
       ],
       "source": "curated_wrapper",
-      "summary": "Add a comment to a task."
+      "summary": "Add a single comment to a task."
+    },
+    {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operations GetTaskComments, CreateTaskComment.",
+      "is_write": true,
+      "label": "Curated wrapper commands",
+      "name": "comments",
+      "operation_ids": [
+        "GetTaskComments",
+        "CreateTaskComment"
+      ],
+      "source": "curated_wrapper",
+      "summary": "List task comments, or add one."
     },
     {
       "command_family": "curated_wrappers",
@@ -11293,22 +11307,6 @@
     {
       "command_family": "curated_wrappers",
       "family": "curated_wrappers",
-      "generated_operation_hint": "For full API fields, use generated operations GetTask, CreateChecklist, CreateChecklistItem, EditChecklistItem.",
-      "is_write": true,
-      "label": "Curated wrapper commands",
-      "name": "sync-checklist",
-      "operation_ids": [
-        "GetTask",
-        "CreateChecklist",
-        "CreateChecklistItem",
-        "EditChecklistItem"
-      ],
-      "source": "curated_wrapper",
-      "summary": "Create or update checklist items from a non-destructive item list."
-    },
-    {
-      "command_family": "curated_wrappers",
-      "family": "curated_wrappers",
       "generated_operation_hint": "For full API fields, use generated operation CreateChecklistItem.",
       "is_write": true,
       "label": "Curated wrapper commands",
@@ -11331,6 +11329,86 @@
       ],
       "source": "curated_wrapper",
       "summary": "Edit a checklist item (resolve, rename, reparent, reassign)."
+    },
+    {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operations GetTask, CreateChecklist, CreateChecklistItem, EditChecklistItem.",
+      "is_write": true,
+      "label": "Curated wrapper commands",
+      "name": "sync-checklist",
+      "operation_ids": [
+        "GetTask",
+        "CreateChecklist",
+        "CreateChecklistItem",
+        "EditChecklistItem"
+      ],
+      "source": "curated_wrapper",
+      "summary": "Create or update checklist items from a non-destructive item list."
+    },
+    {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operations GetTask, GetTaskComments, UpdateTask, CreateTaskComment, UpdateComment, CreateChecklist, CreateChecklistItem, EditChecklistItem.",
+      "is_write": true,
+      "label": "Curated wrapper commands",
+      "name": "dev-sync",
+      "operation_ids": [
+        "GetTask",
+        "GetTaskComments",
+        "UpdateTask",
+        "CreateTaskComment",
+        "UpdateComment",
+        "CreateChecklist",
+        "CreateChecklistItem",
+        "EditChecklistItem"
+      ],
+      "source": "curated_wrapper",
+      "summary": "Sync GitHub branch/PR development state into a ClickUp task."
+    },
+    {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operations GetTask, CreateChecklist, CreateChecklistItem, EditChecklistItem.",
+      "is_write": true,
+      "label": "Curated wrapper commands",
+      "name": "work-log",
+      "operation_ids": [
+        "GetTask",
+        "CreateChecklist",
+        "CreateChecklistItem",
+        "EditChecklistItem"
+      ],
+      "source": "curated_wrapper",
+      "summary": "Upsert agent action-item or verification checklist state."
+    },
+    {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operation CreateTaskComment.",
+      "is_write": true,
+      "label": "Curated wrapper commands",
+      "name": "decision-log",
+      "operation_ids": [
+        "CreateTaskComment"
+      ],
+      "source": "curated_wrapper",
+      "summary": "Append a decision record comment to a task."
+    },
+    {
+      "command_family": "curated_wrappers",
+      "family": "curated_wrappers",
+      "generated_operation_hint": "For full API fields, use generated operations CreateTask, CreateChecklist, CreateChecklistItem.",
+      "is_write": true,
+      "label": "Curated wrapper commands",
+      "name": "hotfix-doc",
+      "operation_ids": [
+        "CreateTask",
+        "CreateChecklist",
+        "CreateChecklistItem"
+      ],
+      "source": "curated_wrapper",
+      "summary": "Create a completed documentation task for a merged hotfix PR."
     },
     {
       "command_family": "curated_wrappers",
