@@ -34,6 +34,7 @@ def test_mcp_registers_direct_clickup_tools() -> None:
     assert {
         "clickup_agent_status",
         "clickup_agent_tooling_plan",
+        "clickup_agent_context_manifest",
         "clickup_agent_run_operation",
         "clickup_agent_search",
         "clickup_agent_list_hierarchy",
@@ -61,6 +62,7 @@ def test_mcp_registers_direct_clickup_tools() -> None:
         "clickup_agent_work_log",
         "clickup_agent_decision_log",
         "clickup_agent_hotfix_doc",
+        "clickup_agent_catch_up_docs",
     } <= names
 
 
@@ -97,6 +99,17 @@ def test_mcp_tooling_plan_uses_compact_operation_samples_when_requested() -> Non
     assert "request_schema" not in sample
     assert "response_schema" not in sample
     assert {"name", "method", "path", "tags", "write", "summary"} <= set(sample)
+
+
+def test_mcp_context_manifest_returns_static_manifest() -> None:
+    server = create_server()
+    manifest = server._tool_manager._tools["clickup_agent_context_manifest"].fn()
+
+    assert manifest["kind"] == "context_manifest"
+    assert manifest["verbosity"]["default"] == "concise"
+    assert {"dev-sync", "get-task", "catch-up-docs"} <= {
+        action["name"] for action in manifest["pinned_actions"]
+    }
 
 
 def test_mcp_write_toolchains_default_to_dry_run() -> None:
@@ -149,6 +162,11 @@ def test_mcp_write_toolchains_default_to_dry_run() -> None:
                 "fix": "Documented the endpoint.",
             },
             "CreateTask",
+        ),
+        (
+            "catch-up-docs",
+            {"task_id": "abc", "summary": "Updated operational docs"},
+            "GetTask",
         ),
     ]
 
@@ -226,11 +244,24 @@ def test_mcp_new_wrappers_forward_payloads_and_default_writes_to_dry_run(monkeyp
         changed_files=["README.md"],
         validation="uv run pytest",
     )
+    catch_up = server._tool_manager._tools["clickup_agent_catch_up_docs"].fn(
+        mode="bidirectional",
+        task_id="task-1",
+        summary="Updated operational docs",
+        branch="feature/task-1-docs",
+        pr_url="https://github.com/acme/repo/pull/12",
+        validation=["uv run pytest", "clickup-agent context manifest"],
+        changed_files=["README.md", "src/clickup_agent/mcp_server.py"],
+        self_assign=True,
+        handoff=True,
+        custom_task_ids=True,
+    )
 
     assert update["ok"] is True
     assert create["dry_run"] is True
     assert sync["dry_run"] is True
     assert hotfix["dry_run"] is True
+    assert catch_up["dry_run"] is True
     assert create["response"]["checklist_item"]["id"] == "item-1"
     assert create["response"]["created_items"][0]["id"] == "item-1"
 
@@ -238,17 +269,20 @@ def test_mcp_new_wrappers_forward_payloads_and_default_writes_to_dry_run(monkeyp
     create_payload = json.loads(calls[1][1][calls[1][1].index("--json") + 1])
     sync_payload = json.loads(calls[2][1][calls[2][1].index("--json") + 1])
     hotfix_payload = json.loads(calls[3][1][calls[3][1].index("--json") + 1])
+    catch_up_payload = json.loads(calls[4][1][calls[4][1].index("--json") + 1])
 
     assert calls == [
         ("update-task", calls[0][1]),
         ("create-checklist", calls[1][1]),
         ("sync-checklist", calls[2][1]),
         ("hotfix-doc", calls[3][1]),
+        ("catch-up-docs", calls[4][1]),
     ]
     assert calls[0][1][0] == "--dry-run"
     assert calls[1][1][0] == "--dry-run"
     assert calls[2][1][0] == "--dry-run"
     assert calls[3][1][0] == "--dry-run"
+    assert calls[4][1][0] == "--dry-run"
     assert update_payload == {"task_id": "task-1", "status": "done"}
     assert create_payload == {
         "task_id": "task-1",
@@ -271,6 +305,18 @@ def test_mcp_new_wrappers_forward_payloads_and_default_writes_to_dry_run(monkeyp
         "fix": "Documented the endpoint.",
         "changed_files": ["README.md"],
         "validation": "uv run pytest",
+    }
+    assert catch_up_payload == {
+        "mode": "bidirectional",
+        "task_id": "task-1",
+        "summary": "Updated operational docs",
+        "branch": "feature/task-1-docs",
+        "pr_url": "https://github.com/acme/repo/pull/12",
+        "validation": ["uv run pytest", "clickup-agent context manifest"],
+        "changed_files": ["README.md", "src/clickup_agent/mcp_server.py"],
+        "self_assign": True,
+        "handoff": True,
+        "custom_task_ids": True,
     }
 
 

@@ -402,7 +402,7 @@ main() {
 
   say "Onboarding and macro movesets:"
   printf 'clickup-agent onboard\n'
-  printf 'Includes dev-sync, branch audit, and hotfix-doc examples.\n'
+  printf 'Includes context manifest, dev-sync, catch-up-docs, branch audit, and hotfix-doc examples.\n'
 
   say "Next check:"
   printf 'clickup-agent connect <cursor|claude-code|codex|generic>\n'
