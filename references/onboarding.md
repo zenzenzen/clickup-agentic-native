@@ -39,6 +39,8 @@ is intended.
 | Trigger phrase | Move |
 |---|---|
 | "sync this task", "update the task for this branch", "link the PR" | `dev-sync` |
+| "sync task and PR with current changes and plan" | `catch-up-docs` |
+| "prepare handoff", "load all task decisions before review" | `context load --profile handoff` |
 | "audit my branches", "which branches are merged", "reconcile ClickUp with git" | `dev audit` then `dev-sync` |
 | "log this hotfix", "document PR #N as a hotfix task" | `hotfix-doc` |
 
@@ -46,7 +48,15 @@ Examples:
 
 ```bash
 clickup-agent dev audit
+clickup-agent context load --task-id abc --profile handoff
 clickup-agent run dev-sync --dry-run --task-id abc --branch feature/demo
+clickup-agent run catch-up-docs \
+  --dry-run \
+  --task-id abc \
+  --mode bidirectional \
+  --action-item "Update docs" \
+  --verification "uv run pytest" \
+  --decision "Keep dev-sync narrow"
 clickup-agent run hotfix-doc \
   --dry-run \
   --list-id 123 \

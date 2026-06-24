@@ -16,6 +16,28 @@ def build_context_manifest() -> dict[str, Any]:
             "allowed": ["concise", "normal", "detailed"],
             "guidance": "Prefer compact responses and load only the surfaces needed for the active intent.",
         },
+        "dialogue_guide": [
+            {
+                "user_says": ["link this PR to the task", "sync branch/PR metadata"],
+                "choose": "dev-sync",
+                "reason": "narrow managed development state only: backlink, status comment, PR block, branch/commit/PR metadata, and Development Sync checklist",
+            },
+            {
+                "user_says": ["sync task and PR with current changes and plan"],
+                "choose": "catch-up-docs",
+                "reason": "broad operational catch-up across task description, PR managed block, action items, verification, and decisions",
+            },
+            {
+                "user_says": ["prepare handoff", "load all task decisions before review"],
+                "choose": "context load --profile handoff",
+                "reason": "read compact task, checklist, decision, dev-sync, and PR context before deciding whether to write",
+            },
+            {
+                "user_says": ["just run the narrow wrapper"],
+                "choose": "dev-sync only",
+                "reason": "do not infer scope decisions, rewrite narrative, or create work-log checklists",
+            },
+        ],
         "surfaces": [
             {
                 "name": "clickup-task-summary",
@@ -52,6 +74,13 @@ def build_context_manifest() -> dict[str, Any]:
                 "cost": "moderate",
                 "freshness": "local-gh-read",
             },
+            {
+                "name": "handoff-context",
+                "summary": "Compact task, checklist, decision, dev-sync, and current PR context.",
+                "loader_command": "clickup-agent context load --task-id <task-id> --profile handoff",
+                "cost": "moderate",
+                "freshness": "live-read-and-local-gh-read",
+            },
         ],
         "pinned_actions": [
             {
@@ -70,7 +99,7 @@ def build_context_manifest() -> dict[str, Any]:
                 "name": "catch-up-docs",
                 "kind": "curated-wrapper",
                 "command": "clickup-agent run catch-up-docs --dry-run",
-                "summary": "Plan documentation catch-up from current development state.",
+                "summary": "Plan or apply operational catch-up across ClickUp task, PR, work log, verification, and decisions.",
             },
         ],
         "mcp_action_templates": [
@@ -107,7 +136,7 @@ def build_context_manifest() -> dict[str, Any]:
             {
                 "intent": "prepare-handoff-summary",
                 "aliases": [],
-                "load_first": ["clickup-task-summary", "github-pr"],
+                "load_first": ["handoff-context"],
                 "then_consider": ["clickup-checklist-state", "clickup-task-comments"],
                 "actions": ["get-task", "work-log", "decision-log"],
                 "sync_topology": "no-write-or-explicit-handoff",

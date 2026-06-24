@@ -35,6 +35,7 @@ def test_mcp_registers_direct_clickup_tools() -> None:
         "clickup_agent_status",
         "clickup_agent_tooling_plan",
         "clickup_agent_context_manifest",
+        "clickup_agent_context_load",
         "clickup_agent_run_operation",
         "clickup_agent_search",
         "clickup_agent_list_hierarchy",
@@ -83,6 +84,8 @@ def test_mcp_tooling_plan_labels_generated_operations_and_curated_wrappers() -> 
     assert commands == {
         "clickup-agent tools list (generated OpenAPI operations)",
         "clickup-agent hotkeys list (curated wrappers)",
+        "clickup-agent context manifest",
+        "clickup-agent context load --task-id <id> --profile handoff",
         *(f"clickup-agent run {name}" for name in CURATED_WRAPPER_NAMES),
         "clickup-agent dev pr",
         "clickup-agent dev audit",
@@ -107,9 +110,22 @@ def test_mcp_context_manifest_returns_static_manifest() -> None:
 
     assert manifest["kind"] == "context_manifest"
     assert manifest["verbosity"]["default"] == "concise"
+    assert any(surface["name"] == "handoff-context" for surface in manifest["surfaces"])
     assert {"dev-sync", "get-task", "catch-up-docs"} <= {
         action["name"] for action in manifest["pinned_actions"]
     }
+
+
+def test_mcp_context_load_returns_read_only_handoff_context(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "clickup_agent.mcp_server.load_context_profile",
+        lambda **kwargs: {"kind": "context_load", "profile": kwargs["profile"], "task_id": kwargs["task_id"]},
+    )
+
+    server = create_server()
+    result = server._tool_manager._tools["clickup_agent_context_load"].fn(task_id="abc")
+
+    assert result == {"ok": True, "kind": "context_load", "profile": "handoff", "task_id": "abc"}
 
 
 def test_mcp_write_toolchains_default_to_dry_run() -> None:
@@ -247,10 +263,19 @@ def test_mcp_new_wrappers_forward_payloads_and_default_writes_to_dry_run(monkeyp
     catch_up = server._tool_manager._tools["clickup_agent_catch_up_docs"].fn(
         mode="bidirectional",
         task_id="task-1",
+        name="Ship feature",
         summary="Updated operational docs",
+        markdown_content="# Ship feature",
         branch="feature/task-1-docs",
         pr_url="https://github.com/acme/repo/pull/12",
         validation=["uv run pytest", "clickup-agent context manifest"],
+        action_items=["Update docs"],
+        check_action_items=["Update docs"],
+        verification=["Manual smoke"],
+        check_verification=["Manual smoke"],
+        decisions=["Keep dev-sync narrow"],
+        decision_context=["catch-up-docs owns broader catch-up"],
+        set_pr_title="Ship feature",
         changed_files=["README.md", "src/clickup_agent/mcp_server.py"],
         self_assign=True,
         handoff=True,
@@ -309,10 +334,19 @@ def test_mcp_new_wrappers_forward_payloads_and_default_writes_to_dry_run(monkeyp
     assert catch_up_payload == {
         "mode": "bidirectional",
         "task_id": "task-1",
+        "name": "Ship feature",
         "summary": "Updated operational docs",
+        "markdown_content": "# Ship feature",
         "branch": "feature/task-1-docs",
         "pr_url": "https://github.com/acme/repo/pull/12",
         "validation": ["uv run pytest", "clickup-agent context manifest"],
+        "action_items": ["Update docs"],
+        "check_action_items": ["Update docs"],
+        "verification": ["Manual smoke"],
+        "check_verification": ["Manual smoke"],
+        "decisions": ["Keep dev-sync narrow"],
+        "decision_context": ["catch-up-docs owns broader catch-up"],
+        "set_pr_title": "Ship feature",
         "changed_files": ["README.md", "src/clickup_agent/mcp_server.py"],
         "self_assign": True,
         "handoff": True,

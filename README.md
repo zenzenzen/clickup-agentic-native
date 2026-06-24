@@ -91,7 +91,8 @@ clickup-agent run check-item --dry-run --checklist-id chk --item-id item --resol
 clickup-agent run dev-sync --dry-run --task-id abc --branch feature/demo
 clickup-agent run work-log --dry-run --task-id abc --checklist action-items --add-item "Update docs"
 clickup-agent run decision-log --dry-run --task-id abc --decision "Keep wrapper discovery catalog-backed"
-clickup-agent run catch-up-docs --dry-run --branch feature/86abc123-docs --summary "Updated docs"
+clickup-agent context load --task-id abc --profile handoff
+clickup-agent run catch-up-docs --dry-run --task-id abc --mode bidirectional --action-item "Update docs" --verification "uv run pytest" --decision "Keep dev-sync narrow"
 clickup-agent run subtasks --dry-run --task-id abc
 clickup-agent run tags --dry-run --task-id abc --add review --remove stale
 clickup-agent run timer --dry-run --action start --team-id 123 --task-id abc
@@ -99,8 +100,15 @@ clickup-agent run hotfix-doc --dry-run --list-id 456 --title "Fix docs" --pr-url
 ```
 
 Bundled operational catch-up movesets include `dev-sync`, `work-log`,
-`decision-log`, `catch-up-docs`, branch audit with `dev audit`, and `hotfix-doc`. Use
-`clickup-agent onboard` for trigger phrases and examples.
+`decision-log`, `catch-up-docs`, `context load --profile handoff`, branch audit
+with `dev audit`, and `hotfix-doc`. Use `clickup-agent onboard` for trigger
+phrases and examples.
+
+Dialogue guide:
+
+- Use `dev-sync` when the request is "link this PR to the task" or "sync branch/PR metadata." It updates only managed development state: backlink, status comment, PR block, branch/commit/PR metadata, and `Development Sync`.
+- Use `catch-up-docs` when the request is "sync task and PR with current changes and plan." It coordinates task description, PR managed block, action items, verification, and decision comments.
+- Use `context load --profile handoff` when the request is "prepare handoff" or "load all task decisions before review." It reads compact task, checklist, decision, dev-sync, and PR context before any writes.
 
 A reference GitHub Actions workflow is available at
 `examples/github-actions-dev-sync.yml`. Copy it into `.github/workflows/` when a
@@ -245,7 +253,8 @@ Development should move in small, easy-to-review steps.
 - `scripts/generate_tool_catalog.py` for generating `src/clickup_agent/catalog/tool_catalog.json`.
 - ClickUp HTTP client with auth, redacted errors, and JSON response handling.
 - Registry-backed `tools list` and `hotkeys list` discovery.
-- `run` wrappers for search, hierarchy/list discovery, compact task fetches, status discovery/validation, task creation/update, subtasks, checklists, comments, assignment, due dates, tags, and timers.
+- `context load --profile handoff` for compact read-only task, checklist, decision, dev-sync, and current PR context.
+- `run` wrappers for search, hierarchy/list discovery, compact task fetches, status discovery/validation, task creation/update, subtasks, checklists, comments, assignment, due dates, tags, timers, and operational catch-up.
 - Generated-operation fallback for `clickup-agent run <operation>` so agents can stay inside the local CLI when a curated wrapper is missing or full API fields are needed.
 - `doctor --live-auth` for safe read-only token and workspace authorization checks.
 - Direct MCP wrappers for the first run wrappers plus `clickup_agent_run_operation`, with write workflows defaulting to dry-run unless live execution is requested.

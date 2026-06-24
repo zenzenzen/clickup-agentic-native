@@ -783,6 +783,146 @@ def test_catch_up_docs_create_task_bootstrap_is_dry_run(capsys) -> None:
     assert any(order["tool"] == "clickup-agent run assign-me" for order in orders)
 
 
+def test_catch_up_docs_composes_sync_work_logs_decisions_and_pr_title(capsys) -> None:
+    assert (
+        main(
+            [
+                "run",
+                "catch-up-docs",
+                "--dry-run",
+                "--task-id",
+                "abc",
+                "--mode",
+                "bidirectional",
+                "--branch",
+                "feature/task",
+                "--pr-url",
+                "https://github.com/acme/repo/pull/12",
+                "--name",
+                "Ship feature",
+                "--markdown-content",
+                "# Ship feature",
+                "--action-item",
+                "Update docs",
+                "--check-action-item",
+                "Update docs",
+                "--verification",
+                "uv run pytest",
+                "--decision",
+                "Keep dev-sync narrow",
+                "--decision-context",
+                "catch-up-docs composes broader operational catch-up",
+                "--set-pr-title",
+                "Ship feature",
+            ]
+        )
+        == 0
+    )
+
+    payload = _json_output(capsys)
+    operation_ids = [operation["operation_id"] for operation in payload["operations"]]
+    orders = payload["response"]["action_plan"]["orders"]
+
+    assert "UpdateTask" in operation_ids
+    assert "GitHubPrBodyUpsert" in operation_ids
+    assert "GitHubPrTitleUpdate" == operation_ids[-1]
+    assert operation_ids.count("CreateTaskComment") >= 3
+    assert payload["response"]["planned_updates"]["github_pr_title"] == "update"
+    assert [order["tool"] for order in orders][-4:] == [
+        "clickup-agent run work-log",
+        "clickup-agent run work-log",
+        "clickup-agent run decision-log",
+        "gh pr edit",
+    ]
+    assert orders[1]["arguments"]["name"] == "Ship feature"
+    assert orders[1]["arguments"]["markdown_content"] == "# Ship feature"
+
+
+def test_catch_up_docs_live_reuses_work_log_and_decision_log_without_deleting_items() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.method == "GET" and request.url.path == "/api/v2/task/abc":
+            return httpx.Response(
+                200,
+                json={
+                    "id": "abc",
+                    "url": "https://app.clickup.com/t/abc",
+                    "description": "",
+                    "status": {"status": "in progress"},
+                    "checklists": [
+                        {
+                            "id": "dev",
+                            "name": "Development Sync",
+                            "items": [
+                                {"id": "dev-1", "name": "Branch pushed", "resolved": True},
+                                {"id": "dev-2", "name": "PR opened", "resolved": True},
+                                {"id": "dev-3", "name": "Latest commit recorded", "resolved": True},
+                                {"id": "dev-4", "name": "Lint/type checks passed", "resolved": False},
+                                {"id": "dev-5", "name": "Review completed", "resolved": False},
+                                {"id": "dev-6", "name": "Merged", "resolved": False},
+                            ],
+                        },
+                        {
+                            "id": "action",
+                            "name": "Action Items",
+                            "items": [{"id": "ai-1", "name": "Update docs", "resolved": False}],
+                        },
+                        {"id": "ver", "name": "Verification", "items": []},
+                    ],
+                },
+            )
+        if request.method == "GET" and request.url.path == "/api/v2/task/abc/comment":
+            return httpx.Response(200, json={"comments": []})
+        if request.method == "POST" and request.url.path == "/api/v2/checklist/ver/checklist_item":
+            body = json.loads(request.content)
+            return httpx.Response(200, json={"checklist_item": {"id": "ver-1", "name": body["name"]}})
+        return httpx.Response(200, json={"ok": True})
+
+    runner = ToolchainRunner(
+        client_factory=lambda: ClickUpClient(
+            ClickUpConfig(api_key="pk_test"),
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    result = runner.run(
+        "catch-up-docs",
+        [
+            "--live",
+            "--task-id",
+            "abc",
+            "--mode",
+            "clickup-only",
+            "--branch",
+            "feature/task",
+            "--action-item",
+            "Update docs",
+            "--check-action-item",
+            "Update docs",
+            "--verification",
+            "uv run pytest",
+            "--decision",
+            "Keep dev-sync narrow",
+        ],
+    )
+
+    paths = [request.url.path for request in requests]
+    bodies = [json.loads(request.content) for request in requests if request.content]
+    decision_comments = [
+        body
+        for body in bodies
+        if str(body.get("comment_text", "")).startswith("[dev-sync:decision]")
+    ]
+
+    assert result.dry_run is False
+    assert "/api/v2/checklist/action/checklist_item/ai-1" in paths
+    assert "/api/v2/checklist/ver/checklist_item" in paths
+    assert not any(request.method == "DELETE" for request in requests)
+    assert decision_comments
+
+
 def test_catch_up_docs_live_requires_explicit_mode_and_target(capsys) -> None:
     assert main(["run", "catch-up-docs", "--live", "--task-id", "abc"]) == 2
     output = capsys.readouterr().out

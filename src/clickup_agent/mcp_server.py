@@ -19,6 +19,7 @@ from mcp.server.fastmcp import FastMCP
 
 from . import __version__
 from .config import config_status
+from .context_loader import load_context_profile
 from .context_manifest import build_context_manifest
 from .devlinks import inspect_dev_pr
 from .discovery import CURATED_WRAPPERS
@@ -116,6 +117,8 @@ def create_server() -> FastMCP:
             "implemented_commands": [
                 "clickup-agent tools list (generated OpenAPI operations)",
                 "clickup-agent hotkeys list (curated wrappers)",
+                "clickup-agent context manifest",
+                "clickup-agent context load --task-id <id> --profile handoff",
                 *[f"clickup-agent run {wrapper.name}" for wrapper in CURATED_WRAPPERS],
                 "clickup-agent dev pr",
                 "clickup-agent dev audit",
@@ -134,6 +137,29 @@ def create_server() -> FastMCP:
     def clickup_agent_context_manifest() -> dict[str, Any]:
         """Return the static low-token context manifest of retrievable context surfaces."""
         return build_context_manifest()
+
+    @server.tool()
+    def clickup_agent_context_load(
+        task_id: str,
+        profile: str = "handoff",
+        custom_task_ids: bool | None = None,
+        team_id: str | None = None,
+        timeout: float = 10.0,
+    ) -> dict[str, Any]:
+        """Load compact read-only task, decision, checklist, and current PR context."""
+        try:
+            return {
+                "ok": True,
+                **load_context_profile(
+                    task_id=task_id,
+                    profile=profile,
+                    custom_task_ids=custom_task_ids,
+                    team_id=team_id,
+                    timeout=timeout,
+                ),
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
 
     @server.tool()
     def clickup_agent_run_operation(
@@ -809,13 +835,22 @@ def create_server() -> FastMCP:
         task_id: str | None = None,
         create_task: bool | None = None,
         list_id: str | None = None,
+        name: str | None = None,
         title: str | None = None,
         summary: str | None = None,
+        markdown_content: str | None = None,
         branch: str | None = None,
         pr_url: str | None = None,
         pr_title: str | None = None,
         pr_state: str | None = None,
         validation: list[str] | None = None,
+        action_items: list[str] | None = None,
+        check_action_items: list[str] | None = None,
+        verification: list[str] | None = None,
+        check_verification: list[str] | None = None,
+        decisions: list[str] | None = None,
+        decision_context: list[str] | None = None,
+        set_pr_title: str | bool | None = None,
         changed_files: list[str] | None = None,
         self_assign: bool | None = None,
         handoff: bool | None = None,
@@ -823,7 +858,7 @@ def create_server() -> FastMCP:
         team_id: str | None = None,
         live: bool = False,
     ) -> dict[str, Any]:
-        """Plan a documentation catch-up from task/PR/dev context. Defaults to dry-run."""
+        """Plan operational catch-up from task/PR/dev context. Defaults to dry-run."""
         return _run_mcp_toolchain(
             "catch-up-docs",
             _payload_without_none(
@@ -831,13 +866,22 @@ def create_server() -> FastMCP:
                 task_id=task_id,
                 create_task=create_task,
                 list_id=list_id,
+                name=name,
                 title=title,
                 summary=summary,
+                markdown_content=markdown_content,
                 branch=branch,
                 pr_url=pr_url,
                 pr_title=pr_title,
                 pr_state=pr_state,
                 validation=validation,
+                action_items=action_items,
+                check_action_items=check_action_items,
+                verification=verification,
+                check_verification=check_verification,
+                decisions=decisions,
+                decision_context=decision_context,
+                set_pr_title=set_pr_title,
                 changed_files=changed_files,
                 self_assign=self_assign,
                 handoff=handoff,

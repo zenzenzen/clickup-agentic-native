@@ -39,6 +39,7 @@ When agents need to act through MCP, they should form an MCP action plan first: 
 - Source metadata that identifies whether a run used a curated wrapper or generated OpenAPI operation.
 - Checklist workflows that expose checklist item IDs plainly and support multi-item creation/sync from item files.
 - Status discovery and validation using a task or list before applying wrapper status updates.
+- Operational catch-up workflows that compose managed dev sync, task descriptions, work logs, decisions, PR managed blocks, and handoff context loading.
 - `markdown_content` guidance because ClickUp may normalize stored rendered descriptions.
 
 ## Documentation Pointers

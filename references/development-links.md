@@ -29,6 +29,10 @@ comments first and skips backlink creation when the URL is already present.
 
 ## Development Sync
 
+Use `dev-sync` for narrow branch/PR metadata sync. If the operator asks to
+sync the task and PR with the current changes, plan, action items,
+verification, or decisions, use `catch-up-docs` instead.
+
 Dry-run example:
 
 ```bash

@@ -54,7 +54,7 @@ The canonical local secret file is `$HOME/.config/clickup-agent/.env`. That is t
 
 ## Current Truth
 
-Implemented today: Python 3.12 CLI, generated ClickUp V2 tool catalog, `tools list` for generated OpenAPI operations, `hotkeys list` for curated wrappers, onboarding aliases, read-only `dev pr` and `dev audit` helpers, task/search/comment/checklist/timer `run` wrappers, compact task fetches, task status discovery, checklist sync, dev sync, work-log, decision-log, hotfix-doc, and catch-up-docs macro wrappers, generated-operation fallback through `clickup-agent run <operation-id-or-name>`, `doctor --live-auth`, MCP bootstrap/status tools, direct MCP wrappers for the implemented run wrappers, `clickup_agent_run_operation`, Cursor MCP config support, and skill installation.
+Implemented today: Python 3.12 CLI, generated ClickUp V2 tool catalog, `tools list` for generated OpenAPI operations, `hotkeys list` for curated wrappers, onboarding aliases, read-only `dev pr` and `dev audit` helpers, `context manifest`, `context load --profile handoff`, task/search/comment/checklist/timer `run` wrappers, compact task fetches, task status discovery, checklist sync, narrow dev sync, work-log, decision-log, hotfix-doc, and broad catch-up-docs macro wrappers, generated-operation fallback through `clickup-agent run <operation-id-or-name>`, `doctor --live-auth`, MCP bootstrap/status tools, direct MCP wrappers for the implemented run wrappers, `clickup_agent_context_load`, `clickup_agent_run_operation`, Cursor MCP config support, and skill installation.
 
 Planned: broader ClickUp API workflows for docs, users, guests, user groups, lists, attachments, webhooks, admin surfaces, richer entity resolution, and expanded curated wrappers.
 
@@ -71,6 +71,8 @@ clickup-agent tools find task comments
 clickup-agent hotkeys list
 clickup-agent doctor || true
 clickup-agent onboard
+clickup-agent context manifest
+clickup-agent context load --task-id abc --profile handoff
 clickup-agent dev pr
 clickup-agent dev audit
 clickup-agent run create-task --dry-run --list-id 123 --name "Smoke test"
@@ -83,6 +85,7 @@ clickup-agent run create-checklist --dry-run --task-id abc --name "Smoke checkli
 clickup-agent run sync-checklist --dry-run --task-id abc --name "Smoke checklist" --items checklist.json --resolve-all
 clickup-agent run dev-sync --dry-run --task-id abc --branch feature/demo --pr-url https://github.com/org/repo/pull/1
 clickup-agent run dev-sync --dry-run --task-id abc --mode clickup-to-github --pr-url https://github.com/org/repo/pull/1
+clickup-agent run catch-up-docs --dry-run --task-id abc --mode bidirectional --action-item "Implement change" --verification "Run focused tests" --decision "Keep dev-sync narrow"
 clickup-agent run work-log --dry-run --task-id abc --add-item "Implement change"
 clickup-agent run decision-log --dry-run --task-id abc --decision "Switched X to Y"
 clickup-agent run hotfix-doc --dry-run --list-id 123 --title "Fix docs" --pr-url https://github.com/org/repo/pull/1 --problem "What broke" --fix "What changed"
@@ -97,6 +100,8 @@ env setup, doctor checks, curated toolchains, and macro movesets.
 | User says | Macro |
 |---|---|
 | "sync this task", "update the task for this branch", "link the PR" | `dev-sync` |
+| "sync task and PR with current changes and plan" | `catch-up-docs` |
+| "prepare handoff", "load all task decisions before review" | `context load --profile handoff` |
 | "audit my branches", "which branches are merged", "reconcile ClickUp with git" | `dev audit` then `dev-sync` |
 | "log this hotfix", "document PR #N as a hotfix task" | `hotfix-doc` |
 
@@ -121,6 +126,15 @@ only its visible `[dev-sync]` comment/description block, and manages the
 `Development Sync` checklist by item name. Use `--mode clickup-to-github` to
 upsert only the managed PR-body block, and `--mode bidirectional` to compose
 both directions. Never use ClickUp state to close, merge, or reopen PRs.
+
+Use `catch-up-docs` instead when the user asks to sync the task and PR with the
+current changes, plan, action items, verification, or decisions. `catch-up-docs`
+composes `dev-sync`, `work-log`, and `decision-log`, and only updates a PR title
+when `--set-pr-title` is explicit.
+
+Use `clickup-agent context load --task-id <task-id> --profile handoff` before
+review or handoff work that needs compact task, checklist, decision, dev-sync,
+and current PR context.
 
 ## Reconcile Merged Branches Into ClickUp
 

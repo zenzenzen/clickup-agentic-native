@@ -15,7 +15,7 @@ from typing import Any, Callable
 
 from .client import ClickUpApiError, ClickUpClient
 from .config import ConfigError, load_workspace_id
-from .devlinks import guess_clickup_task_id, render_pr_body_block, write_pr_body_block
+from .devlinks import guess_clickup_task_id, render_pr_body_block, write_pr_body_block, write_pr_title
 from .devsync import (
     DEVELOPMENT_SYNC_CHECKLIST,
     ClickUpTaskContext,
@@ -1967,12 +1967,96 @@ def _run_catch_up_docs(options: RunOptions, catalog: ToolCatalog, client: ClickU
 
     if task_id and mode in {"clickup-only", "pr-only", "bidirectional"}:
         dev_sync_result = _run_dev_sync(
-            _catch_up_docs_dev_sync_options(options, payload, str(task_id), str(mode)),
+            _delegated_run_options(
+                options,
+                "dev-sync",
+                _catch_up_docs_dev_sync_payload(payload, str(task_id), str(mode)),
+            ),
             catalog,
             client,
         )
         operations.extend(dev_sync_result.operations)
         action_plan["delegated_response"] = dev_sync_result.response
+
+    apply_clickup = mode in {"clickup-only", "bidirectional"}
+    apply_github = mode in {"pr-only", "bidirectional"}
+    if task_id and apply_clickup:
+        action_items = _catch_up_docs_action_items(payload)
+        checked_action_items = _catch_up_docs_checked_action_items(payload)
+        if action_items or checked_action_items:
+            work_log_result = _run_work_log(
+                _delegated_run_options(
+                    options,
+                    "work-log",
+                    {
+                        "task_id": str(task_id),
+                        "checklist": "action-items",
+                        "add_items": action_items,
+                        "checks": checked_action_items,
+                        **_task_id_options(payload),
+                    },
+                ),
+                catalog,
+                client,
+            )
+            operations.extend(work_log_result.operations)
+
+        verification_items = _catch_up_docs_verification_items(payload)
+        checked_verification_items = _catch_up_docs_checked_verification_items(payload)
+        if verification_items or checked_verification_items:
+            verification_result = _run_work_log(
+                _delegated_run_options(
+                    options,
+                    "work-log",
+                    {
+                        "task_id": str(task_id),
+                        "checklist": "verification",
+                        "add_items": verification_items,
+                        "checks": checked_verification_items,
+                        **_task_id_options(payload),
+                    },
+                ),
+                catalog,
+                client,
+            )
+            operations.extend(verification_result.operations)
+
+        for decision in _catch_up_docs_decision_records(payload):
+            decision_result = _run_decision_log(
+                _delegated_run_options(
+                    options,
+                    "decision-log",
+                    {
+                        "task_id": str(task_id),
+                        "decision": decision["decision"],
+                        **({"context": decision["context"]} if decision.get("context") else {}),
+                        "source": "conversation",
+                        **({"pr_url": payload["pr_url"]} if payload.get("pr_url") else {}),
+                        **_task_id_options(payload),
+                    },
+                ),
+                catalog,
+                client,
+            )
+            operations.extend(decision_result.operations)
+
+    github_updates: dict[str, Any] = {}
+    pr_title = _catch_up_docs_pr_title(payload) if apply_github else None
+    if pr_title:
+        pr_url = payload.get("pr_url")
+        if not pr_url:
+            raise ToolchainError("catch-up-docs --set-pr-title requires --pr-url")
+        operations.append(
+            {
+                "operation_id": "GitHubPrTitleUpdate",
+                "method": "PATCH",
+                "path": str(pr_url),
+                "title": pr_title,
+                "guardrail": "only updates the PR title because --set-pr-title was explicit",
+            }
+        )
+        if not options.dry_run:
+            github_updates["title"] = write_pr_title(str(pr_url), pr_title)
 
     response = {
         "intent": "catch-up-docs",
@@ -1984,6 +2068,10 @@ def _run_catch_up_docs(options: RunOptions, catalog: ToolCatalog, client: ClickU
         "mode": mode or "plan-only",
         "action_plan": action_plan,
     }
+    if pr_title:
+        response["planned_updates"] = {"github_pr_title": "update"}
+    if github_updates:
+        response["github"] = github_updates
     return RunResult(options.name, options.dry_run, operations, response)
 
 
@@ -1992,13 +2080,22 @@ def _configure_catch_up_docs(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--task-id", required=False)
     parser.add_argument("--create-task", action="store_true", default=None)
     parser.add_argument("--list-id")
+    parser.add_argument("--name")
     parser.add_argument("--title")
     parser.add_argument("--summary")
+    parser.add_argument("--markdown-content", dest="markdown_content")
     parser.add_argument("--branch")
     parser.add_argument("--pr-url")
     parser.add_argument("--pr-title")
     parser.add_argument("--pr-state")
     parser.add_argument("--validation", action="append")
+    parser.add_argument("--action-item", dest="action_items", action="append")
+    parser.add_argument("--check-action-item", dest="check_action_items", action="append")
+    parser.add_argument("--verification", action="append")
+    parser.add_argument("--check-verification", dest="check_verification", action="append")
+    parser.add_argument("--decision", dest="decisions", action="append")
+    parser.add_argument("--decision-context", dest="decision_contexts", action="append")
+    parser.add_argument("--set-pr-title", dest="set_pr_title", nargs="?", const=True, default=None)
     parser.add_argument("--changed-file", dest="changed_files", action="append")
     parser.add_argument("--self-assign", action="store_true", default=None)
     parser.add_argument("--handoff", action="store_true", default=None)
@@ -2018,6 +2115,8 @@ def _catch_up_docs_action_plan(
     decisions: list[str],
 ) -> dict[str, Any]:
     orders: list[dict[str, Any]] = []
+    apply_clickup = mode in {"clickup-only", "bidirectional"}
+    apply_github = mode in {"pr-only", "bidirectional"}
     if task_id:
         orders.append(
             {
@@ -2039,7 +2138,7 @@ def _catch_up_docs_action_plan(
                     }.items()
                     if value is not None
                 },
-                "purpose": "create an explicit target Task for documentation catch-up",
+                "purpose": "create an explicit target Task for operational catch-up",
             }
         )
         if self_assign:
@@ -2058,24 +2157,64 @@ def _catch_up_docs_action_plan(
                 "purpose": "reuse managed development sync instead of a parallel sync engine",
             }
         )
-    if payload.get("validation"):
+    action_items = _catch_up_docs_action_items(payload)
+    checked_action_items = _catch_up_docs_checked_action_items(payload)
+    if task_id and apply_clickup and (action_items or checked_action_items):
+        orders.append(
+            {
+                "tool": "clickup-agent run work-log",
+                "arguments": {
+                    "task_id": task_id or "<created-task-id>",
+                    "checklist": "action-items",
+                    "add_items": action_items,
+                    "checks": checked_action_items,
+                },
+                "purpose": "sync inferred action items into the managed Action Items checklist",
+            }
+        )
+    verification_items = _catch_up_docs_verification_items(payload)
+    checked_verification_items = _catch_up_docs_checked_verification_items(payload)
+    if task_id and apply_clickup and (verification_items or checked_verification_items):
         orders.append(
             {
                 "tool": "clickup-agent run work-log",
                 "arguments": {
                     "task_id": task_id or "<created-task-id>",
                     "checklist": "verification",
-                    "add_item": payload.get("validation"),
+                    "add_items": verification_items,
+                    "checks": checked_verification_items,
                 },
-                "purpose": "sync detected validation into the managed Verification checklist",
+                "purpose": "sync validation into the managed Verification checklist",
+            }
+        )
+    for decision in _catch_up_docs_decision_records(payload):
+        if task_id and apply_clickup:
+            orders.append(
+                {
+                    "tool": "clickup-agent run decision-log",
+                    "arguments": {
+                        "task_id": task_id or "<created-task-id>",
+                        "decision": decision["decision"],
+                        **({"context": decision["context"]} if decision.get("context") else {}),
+                    },
+                    "purpose": "append an explicit decision comment after agent context review",
+                }
+            )
+    pr_title = _catch_up_docs_pr_title(payload) if apply_github else None
+    if pr_title:
+        orders.append(
+            {
+                "tool": "gh pr edit",
+                "arguments": {"pr_url": payload.get("pr_url"), "title": pr_title},
+                "purpose": "update the PR title only because --set-pr-title was explicit",
             }
         )
     if handoff:
         orders.append(
             {
-                "tool": "clickup-agent run decision-log",
-                "arguments": {"task_id": task_id or "<created-task-id>", "decision": "Handoff prepared"},
-                "purpose": "append an explicit handoff note only when requested",
+                "tool": "clickup-agent context load",
+                "arguments": {"task_id": task_id or "<created-task-id>", "profile": "handoff"},
+                "purpose": "load compact task, checklist, decision, and PR context before handoff",
             }
         )
     if not orders:
@@ -2088,6 +2227,7 @@ def _catch_up_docs_action_plan(
             "live writes require explicit task target or explicit task creation",
             "live writes require explicit write topology",
             "managed blocks/checklists only; no arbitrary checklist rewrites",
+            "PR title updates require explicit --set-pr-title",
         ],
         "suggested_create_task": None if task_id or create_task else _catch_up_docs_create_task_suggestion(payload, inferred_task_id),
     }
@@ -2099,26 +2239,27 @@ def _catch_up_docs_create_task_suggestion(payload: dict[str, Any], inferred_task
         "reason": "No unambiguous ClickUp Task target was found.",
         "candidate_task_id": inferred_task_id,
         "bootstrap": {
-            "title": payload.get("title") or payload.get("pr_title") or payload.get("branch") or "Catch up docs",
+            "title": _catch_up_docs_title(payload),
             "branch": payload.get("branch"),
             "pr_url": payload.get("pr_url"),
             "pr_title": payload.get("pr_title"),
             "pr_state": payload.get("pr_state"),
             "summary": payload.get("summary"),
             "tags": ["documentation", "catch-up", *(["github"] if payload.get("pr_url") else [])],
-            "action_items": ["review generated catch-up", "confirm linked PR/task"],
-            "verification": list(_csv_or_list(payload.get("validation"))),
+            "action_items": _catch_up_docs_action_items(payload) or ["review generated catch-up", "confirm linked PR/task"],
+            "verification": _catch_up_docs_verification_items(payload),
+            "decisions": [item["decision"] for item in _catch_up_docs_decision_records(payload)],
         },
     }
 
 
 def _catch_up_docs_create_task_payload(payload: dict[str, Any], *, self_assign: bool) -> dict[str, Any]:
     _require(payload, ["list_id"], context="catch-up-docs --create-task")
-    title = payload.get("title") or payload.get("pr_title") or payload.get("branch") or "Catch up docs"
+    title = _catch_up_docs_title(payload)
     body = {
         "list_id": payload["list_id"],
         "name": title,
-        "markdown_content": _catch_up_docs_markdown(payload),
+        "markdown_content": payload.get("markdown_content") or _catch_up_docs_markdown(payload),
         "tags": ["documentation", "catch-up", *(["github"] if payload.get("pr_url") else [])],
     }
     if self_assign:
@@ -2127,7 +2268,7 @@ def _catch_up_docs_create_task_payload(payload: dict[str, Any], *, self_assign: 
 
 
 def _catch_up_docs_markdown(payload: dict[str, Any]) -> str:
-    lines = [f"# {payload.get('title') or payload.get('pr_title') or payload.get('branch') or 'Catch up docs'}", ""]
+    lines = [f"# {_catch_up_docs_title(payload)}", ""]
     if payload.get("summary"):
         lines.extend(["## Development summary", str(payload["summary"]), ""])
     if payload.get("branch"):
@@ -2141,27 +2282,24 @@ def _catch_up_docs_markdown(payload: dict[str, Any]) -> str:
     changed_files = _csv_or_list(payload.get("changed_files"))
     if changed_files:
         lines.extend(["", "## Changed files", *[f"- {item}" for item in changed_files]])
-    validation = _csv_or_list(payload.get("validation"))
+    validation = _catch_up_docs_verification_items(payload)
     if validation:
         lines.extend(["", "## Validation", *[f"- {item}" for item in validation]])
+    action_items = _catch_up_docs_action_items(payload)
+    if action_items:
+        lines.extend(["", "## Action items", *[f"- {item}" for item in action_items]])
+    decisions = _catch_up_docs_decision_records(payload)
+    if decisions:
+        lines.extend(["", "## Decisions", *[f"- {item['decision']}" for item in decisions]])
     return "\n".join(lines).strip()
 
 
-def _catch_up_docs_dev_sync_options(options: RunOptions, payload: dict[str, Any], task_id: str, mode: str) -> RunOptions:
-    argv: list[str] = ["--task-id", task_id, "--mode", _catch_up_docs_dev_sync_mode(mode)]
-    for payload_key, flag in (
-        ("branch", "--branch"),
-        ("pr_url", "--pr-url"),
-        ("pr_title", "--pr-title"),
-        ("pr_state", "--pr-state"),
-    ):
-        if payload.get(payload_key):
-            argv.extend([flag, str(payload[payload_key])])
+def _delegated_run_options(options: RunOptions, name: str, payload: dict[str, Any]) -> RunOptions:
     return RunOptions(
-        name="dev-sync",
-        requested_name="dev-sync",
-        json_payload={},
-        flag_payload={"_argv": argv},
+        name=name,
+        requested_name=name,
+        json_payload=payload,
+        flag_payload={"_argv": []},
         dry_run=options.dry_run,
         live=options.live,
     )
@@ -2169,10 +2307,69 @@ def _catch_up_docs_dev_sync_options(options: RunOptions, payload: dict[str, Any]
 
 def _catch_up_docs_dev_sync_payload(payload: dict[str, Any], task_id: str, mode: str) -> dict[str, Any]:
     data: dict[str, Any] = {"task_id": task_id, "mode": _catch_up_docs_dev_sync_mode(mode)}
-    for key in ("branch", "pr_url", "pr_title", "pr_state"):
+    for key in ("branch", "pr_url", "pr_title", "pr_state", "name", "markdown_content"):
         if payload.get(key):
             data[key] = payload[key]
+    data.update(_task_id_options(payload))
     return data
+
+
+def _catch_up_docs_title(payload: dict[str, Any]) -> str:
+    return str(payload.get("name") or payload.get("title") or payload.get("pr_title") or payload.get("branch") or "Catch up docs")
+
+
+def _catch_up_docs_action_items(payload: dict[str, Any]) -> list[str]:
+    return [str(item) for item in _csv_or_list(payload.get("action_items"))]
+
+
+def _catch_up_docs_checked_action_items(payload: dict[str, Any]) -> list[str]:
+    return [str(item) for item in _csv_or_list(payload.get("check_action_items"))]
+
+
+def _catch_up_docs_verification_items(payload: dict[str, Any]) -> list[str]:
+    items = [*_csv_or_list(payload.get("validation")), *_csv_or_list(payload.get("verification"))]
+    return [str(item) for item in items]
+
+
+def _catch_up_docs_checked_verification_items(payload: dict[str, Any]) -> list[str]:
+    return [str(item) for item in _csv_or_list(payload.get("check_verification"))]
+
+
+def _catch_up_docs_decision_records(payload: dict[str, Any]) -> list[dict[str, str | None]]:
+    decisions = _text_values(payload.get("decisions") if "decisions" in payload else payload.get("decision"))
+    contexts = _text_values(
+        payload.get("decision_contexts") if "decision_contexts" in payload else payload.get("decision_context")
+    )
+    records: list[dict[str, str | None]] = []
+    for index, decision in enumerate(decisions):
+        context = contexts[index] if index < len(contexts) else contexts[0] if len(contexts) == 1 else None
+        records.append({"decision": decision, "context": context})
+    return records
+
+
+def _catch_up_docs_pr_title(payload: dict[str, Any]) -> str | None:
+    requested = payload.get("set_pr_title")
+    if requested in (None, False):
+        return None
+    if isinstance(requested, str) and requested.strip():
+        return requested.strip()
+    for key in ("name", "title", "pr_title"):
+        if payload.get(key):
+            return str(payload[key]).strip()
+    raise ToolchainError("catch-up-docs --set-pr-title requires --name, --title, --pr-title, or an explicit title value")
+
+
+def _task_id_options(payload: dict[str, Any]) -> dict[str, Any]:
+    return {key: payload[key] for key in ("custom_task_ids", "team_id") if key in payload}
+
+
+def _text_values(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item).strip()]
+    text = str(value).strip()
+    return [text] if text else []
 
 
 def _catch_up_docs_dev_sync_mode(mode: str) -> str:

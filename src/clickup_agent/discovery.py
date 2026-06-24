@@ -173,7 +173,7 @@ CURATED_WRAPPERS: tuple[CuratedWrapper, ...] = (
     ),
     CuratedWrapper(
         name="catch-up-docs",
-        summary="Plan or apply documentation catch-up from current development state.",
+        summary="Plan or apply operational catch-up across ClickUp task, PR, work log, verification, and decisions.",
         operation_ids=(
             "GetTask",
             "GetTaskComments",

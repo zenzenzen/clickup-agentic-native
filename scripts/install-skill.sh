@@ -59,7 +59,7 @@ install_skill() {
   printf '  "Use clickup-agentic-native to explain current ClickUp capabilities."\n'
   printf '\nOnboarding:\n'
   printf '  clickup-agent onboard\n'
-  printf '  Macro movesets: dev-sync, branch audit, hotfix-doc.\n'
+  printf '  Macro movesets: dev-sync, catch-up-docs, context load, branch audit, hotfix-doc.\n'
 }
 
 install_skill "$@"

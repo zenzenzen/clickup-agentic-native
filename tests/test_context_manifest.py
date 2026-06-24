@@ -25,10 +25,11 @@ def test_context_manifest_exposes_operational_catchup_actions(capsys) -> None:
     surfaces = {surface["name"] for surface in payload["surfaces"]}
 
     assert {"dev-sync", "get-task", "catch-up-docs"} <= pinned_actions
+    assert any(item["choose"] == "catch-up-docs" for item in payload["dialogue_guide"])
     assert {
         "catch-up-clickup-from-current-work",
         "catch-up-clickup-from-pr",
         "catch-up-clickup-and-pr",
         "prepare-handoff-summary",
     } <= intents
-    assert {"clickup-task-summary", "github-pr", "branch-audit"} <= surfaces
+    assert {"clickup-task-summary", "github-pr", "branch-audit", "handoff-context"} <= surfaces

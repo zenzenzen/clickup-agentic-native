@@ -18,6 +18,7 @@ Read `../CONTEXT.md` for product intent and `../UBIQUITOUS_LANGUAGE.md` for cano
 - `clickup-agent tools find <query...> [--format table|json]`
 - `clickup-agent hotkeys list [--format table|json]`
 - `clickup-agent context manifest`
+- `clickup-agent context load --task-id <id> --profile handoff`
 - `clickup-agent dev pr`
 - `clickup-agent dev audit`
 - `clickup-agent run search`
@@ -56,6 +57,7 @@ Read `../CONTEXT.md` for product intent and `../UBIQUITOUS_LANGUAGE.md` for cano
   - `clickup_agent_status`
   - `clickup_agent_tooling_plan`
   - `clickup_agent_context_manifest`
+  - `clickup_agent_context_load`
   - `clickup_agent_run_operation`
   - `clickup_agent_dev_pr`
 - Direct MCP tools:
@@ -95,6 +97,7 @@ clickup-agent chat
 clickup-agent tools list
 clickup-agent hotkeys list
 clickup-agent run <curated-wrapper-or-generated-operation>
+clickup-agent context load --task-id <id> --profile handoff
 clickup-agent onboard
 clickup-agent doctor
 clickup-agent mcp
@@ -132,11 +135,17 @@ Agents can call generated operations directly through `clickup-agent run <operat
 - `subtasks`: subtask retrieval using `GetTask`
 - `tags`: add or remove task tags using `AddTagToTask` and `RemoveTagFromTask`
 - `timer`: current, start, and stop timer actions using time-entry operations
-- `dev-sync`: GitHub branch/PR state sync using `GetTask`, `GetTaskComments`, task/comment updates, non-destructive checklist item convergence, and optional managed GitHub PR-body updates via `--mode clickup-to-github|bidirectional`
+- `dev-sync`: narrow GitHub branch/PR state sync using `GetTask`, `GetTaskComments`, task/comment updates, non-destructive `Development Sync` checklist convergence, and optional managed GitHub PR-body updates via `--mode clickup-to-github|bidirectional`
 - `work-log`: mutable `Action Items` or `Verification` checklist state using non-destructive checklist item convergence
 - `decision-log`: append-only decision record comments using visible `[dev-sync:decision]` markers
 - `hotfix-doc`: completed documentation task creation for a hotfix PR using `CreateTask`, `CreateChecklist`, and `CreateChecklistItem`
-- `catch-up-docs`: dry-run-first documentation catch-up action plan using task/PR/development context and managed sync primitives
+- `catch-up-docs`: dry-run-first operational catch-up using task/PR/development context, `dev-sync`, task description updates, `work-log`, `decision-log`, and explicit PR title updates
+
+## Dialogue Guide
+
+- Choose `dev-sync` for "link this PR to the task" or "sync branch/PR metadata"; it should not infer scope decisions, rewrite narrative, or create work-log checklists.
+- Choose `catch-up-docs` for "sync task and PR with current changes and plan"; it coordinates the managed PR block, task description, action items, verification, and decisions.
+- Choose `context load --profile handoff` for "prepare handoff" or "load all task decisions before review"; it reads compact task, checklist, decision, dev-sync, and PR context before any write workflow.
 
 ## Still Planned
 
