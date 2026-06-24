@@ -99,8 +99,8 @@
 - A **Sync topology** tells an agent which surfaces participate in a sync and how authority/conflicts are handled before write calls are issued.
 - In **Tri-surface sync**, **Development state** is authoritative for current work summary and validation, GitHub **PR metadata** is authoritative for pull request facts, and the ClickUp **Task** is authoritative for task status, checklists, comments, and decision/work logs.
 - **Operational catch-up** uses sync workflows to update ClickUp Tasks and GitHub PRs from **Development state** so the operator does not have to write the same status documentation by hand.
-- **Documentation catch-up** is broader than a **Hotfix documentation receipt**; `catch-up-docs` may choose the `hotfix-doc` workflow only when the work is specifically a merged hotfix PR.
-- `catch-up-docs` should be both a **Pinned action** and a **Curated wrapper** for **Documentation catch-up**.
+- **Documentation catch-up** is a narrower form of **Operational catch-up**; `hotfix-doc` handles the specific merged-hotfix receipt case.
+- `catch-up-docs` should be both a **Pinned action** and a **Curated wrapper** for broad **Operational catch-up**.
 - A **Task** belongs to a **List**, and a **List** defines one or more **List statuses**.
 - **Status validation** compares a requested **Task status** against the **List statuses** before **Live execution**.
 - A **Checklist** belongs to one **Task** and contains zero or more **Checklist items**.

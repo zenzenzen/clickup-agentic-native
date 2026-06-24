@@ -11428,7 +11428,7 @@
         "EditChecklistItem"
       ],
       "source": "curated_wrapper",
-      "summary": "Plan or apply documentation catch-up from current development state."
+      "summary": "Plan or apply operational catch-up across ClickUp task, PR, work log, verification, and decisions."
     },
     {
       "command_family": "curated_wrappers",

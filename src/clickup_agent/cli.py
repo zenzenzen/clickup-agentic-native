@@ -14,6 +14,7 @@ from . import __version__
 from .client import ClickUpApiError, ClickUpClient
 from .connect_cmd import run_connect
 from .config import ConfigError, config_status, default_env_file, load_config
+from .context_loader import load_context_profile
 from .context_manifest import build_context_manifest
 from .devlinks import inspect_dev_audit, inspect_dev_pr
 from .registry import ToolOperation, load_catalog
@@ -115,12 +116,21 @@ def _onboarding_text() -> str:
             "",
             "Macro movesets:",
             "- dev-sync: trigger phrases like \"sync this task\" or \"link the PR\".",
+            "- catch-up-docs: trigger phrases like \"sync task and PR with current changes and plan\".",
+            "- context load: trigger phrases like \"prepare handoff\" or \"load all task decisions before review\".",
             "- branch audit: trigger phrases like \"audit my branches\" or \"which branches are merged\".",
             "- hotfix-doc: trigger phrases like \"log this hotfix\" or \"document PR #N as a hotfix task\".",
             "",
+            "Choosing the right sync:",
+            "- Use dev-sync for narrow branch/PR metadata, backlinks, managed PR block, and Development Sync.",
+            "- Use catch-up-docs when the task/PR also needs description, action items, verification, and decisions.",
+            "- Use context load --profile handoff before reviews or handoffs that need prior decisions.",
+            "",
             "Examples:",
+            "- clickup-agent context load --task-id abc --profile handoff",
             "- clickup-agent dev audit",
             "- clickup-agent run dev-sync --dry-run --task-id abc --branch feature/demo",
+            "- clickup-agent run catch-up-docs --dry-run --task-id abc --mode bidirectional --action-item \"Update docs\" --decision \"Keep dev-sync narrow\"",
             "- clickup-agent run hotfix-doc --dry-run --list-id 123 --title \"Fix docs\" --pr-url https://github.com/org/repo/pull/1 --problem \"What broke\" --fix \"What changed\"",
         ]
     )
@@ -272,6 +282,23 @@ def _cmd_context_manifest(_: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_context_load(args: argparse.Namespace) -> int:
+    try:
+        _print_json(
+            load_context_profile(
+                task_id=args.task_id,
+                profile=args.profile,
+                custom_task_ids=args.custom_task_ids,
+                team_id=args.team_id,
+                timeout=args.timeout,
+            )
+        )
+    except (ClickUpApiError, ConfigError, RuntimeError, ValueError) as exc:
+        print(str(exc))
+        return 2
+    return 0
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     try:
         result = run_toolchain(args.name, args.tool_args)
@@ -384,6 +411,13 @@ def build_parser() -> argparse.ArgumentParser:
     context_subcommands = context.add_subparsers(dest="context_command", required=True)
     context_manifest = context_subcommands.add_parser("manifest", help="Print the static context manifest.")
     context_manifest.set_defaults(func=_cmd_context_manifest)
+    context_load = context_subcommands.add_parser("load", help="Load compact read-only context for handoff.")
+    context_load.add_argument("--task-id", required=True)
+    context_load.add_argument("--profile", choices=["handoff"], default="handoff")
+    context_load.add_argument("--custom-task-ids", action="store_true", default=None)
+    context_load.add_argument("--team-id")
+    context_load.add_argument("--timeout", type=float, default=10.0, help="gh subprocess timeout in seconds.")
+    context_load.set_defaults(func=_cmd_context_load)
 
     run = subcommands.add_parser("run", help="Run a future hotkey or toolchain.")
     run.add_argument("name", help="Hotkey or toolchain name.")

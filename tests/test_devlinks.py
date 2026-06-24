@@ -6,7 +6,7 @@ import subprocess
 import pytest
 
 from clickup_agent.cli import main
-from clickup_agent.devlinks import DevPrState, guess_clickup_task_id, inspect_dev_pr, upsert_pr_body_block
+from clickup_agent.devlinks import DevPrState, guess_clickup_task_id, inspect_dev_pr, upsert_pr_body_block, write_pr_title
 
 
 def test_dev_pr_found_from_cli(monkeypatch, capsys) -> None:
@@ -126,6 +126,21 @@ def test_pr_body_block_upsert_preserves_human_content() -> None:
     updated = upsert_pr_body_block(body, block)
 
     assert updated == "Intro\n\n<!-- clickup-agent:dev-sync:start -->\nnew\n<!-- clickup-agent:dev-sync:end -->\n\nFooter"
+
+
+def test_write_pr_title_uses_explicit_gh_title_edit(monkeypatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command, *, timeout=None, capture_output=True, text=True, check=False):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("clickup_agent.devlinks.subprocess.run", fake_run)
+
+    result = write_pr_title("https://github.com/acme/repo/pull/12", "Ship feature")
+
+    assert calls == [["gh", "pr", "edit", "https://github.com/acme/repo/pull/12", "--title", "Ship feature"]]
+    assert result == {"pr_url": "https://github.com/acme/repo/pull/12", "title": "Ship feature", "updated": True}
 
 
 @pytest.mark.parametrize(

@@ -3,6 +3,13 @@
 Use these workflows when an agent is doing implementation work tied to a
 ClickUp task.
 
+## Dialogue Guide
+
+- Use `dev-sync` when the operator says "link this PR to the task" or "sync branch/PR metadata." It updates only managed development state: backlink, status comment, managed PR block, branch/commit/PR metadata, and `Development Sync`.
+- Use `catch-up-docs` when the operator says "sync task and PR with current changes and plan." It composes `dev-sync`, task description updates, `work-log`, and `decision-log`.
+- Use `context load --profile handoff` when the operator says "prepare handoff" or "load all task decisions before review." It reads compact task, checklist, decision, dev-sync, and current PR context before any writes.
+- Use `dev-sync` only when the operator asks for the narrow wrapper; do not infer scope decisions, rewrite narrative, or create work-log checklists in that path.
+
 ## Work Log
 
 `work-log` is mutable state for the current piece of work. It upserts exact-name
@@ -71,6 +78,33 @@ them:
 The same command defaults to `--mode github-to-clickup`; use `--mode
 bidirectional` when both ClickUp and GitHub surfaces should be updated in one
 dry-run/live envelope.
+
+## Operational Catch-Up
+
+`catch-up-docs` is the broad cross-context wrapper. It can update a ClickUp task
+description through `dev-sync`, upsert `Action Items` and `Verification` through
+`work-log`, append decisions through `decision-log`, and update the managed PR
+body block. PR title updates require explicit `--set-pr-title`.
+
+```bash
+clickup-agent run catch-up-docs \
+  --dry-run \
+  --task-id abc \
+  --mode bidirectional \
+  --branch feature/task \
+  --pr-url https://github.com/owner/repo/pull/123 \
+  --markdown-content "## Current plan" \
+  --action-item "Update docs" \
+  --verification "uv run pytest" \
+  --decision "Keep dev-sync narrow"
+```
+
+Use `context load --profile handoff` before review or handoff work that needs
+the task's existing decisions:
+
+```bash
+clickup-agent context load --task-id abc --profile handoff
+```
 
 ## Branch Audit
 

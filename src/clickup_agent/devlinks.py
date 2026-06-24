@@ -346,5 +346,19 @@ def write_pr_body_block(pr_url: str, block: str, *, timeout: float = 10.0) -> di
     return {"pr_url": pr_url, "updated": True}
 
 
+def write_pr_title(pr_url: str, title: str, *, timeout: float = 10.0) -> dict[str, Any]:
+    """Live GitHub write: update the PR title only when explicitly requested."""
+    edit = subprocess.run(
+        ["gh", "pr", "edit", pr_url, "--title", title],
+        timeout=timeout,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if edit.returncode != 0:
+        raise RuntimeError(_clean_reason(edit.stderr) or "Could not update PR title with gh.")
+    return {"pr_url": pr_url, "title": title, "updated": True}
+
+
 def _clean_reason(value: str | None) -> str:
     return " ".join(str(value or "").strip().split())

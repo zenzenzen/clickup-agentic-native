@@ -93,6 +93,6 @@ preserves existing MCP servers and backs up the existing config first.
 - Confirm the env file path exists outside tracked workspaces and does not expose token values in config files.
 - Run `clickup-agent doctor`.
 - Run `clickup-agent doctor --live-auth` to confirm token and workspace access with read-only ClickUp API calls.
-- The current MCP server exposes bootstrap/status tools, `clickup_agent_context_manifest`, direct wrappers for all implemented curated macros including `catch-up-docs`, and `clickup_agent_run_operation` for generated operations that do not have a curated wrapper yet.
+- The current MCP server exposes bootstrap/status tools, `clickup_agent_context_manifest`, `clickup_agent_context_load`, direct wrappers for all implemented curated macros including `catch-up-docs`, and `clickup_agent_run_operation` for generated operations that do not have a curated wrapper yet.
 - Write wrappers return dry-run previews by default; pass `live: true` only when the action should call ClickUp.
 - Broader ClickUp API coverage for docs, chat, attachments, admin workflows, and richer entity resolution is still planned.
