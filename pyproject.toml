@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "clickup-agentic-native"
 version = "0.3.0"
-description = "Agentic native ClickUp tooling exposed through the clickup-agent command."
+description = "Local ClickUp CLI and MCP server for dry-run-first agent workflows."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }

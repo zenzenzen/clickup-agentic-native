@@ -2,25 +2,30 @@ name: ClickUp dev-sync
 
 on:
   pull_request:
-    types:
-      - opened
-      - edited
-      - synchronize
-      - closed
+    types: [opened, edited, synchronize, closed]
   pull_request_review:
-    types:
-      - submitted
+    types: [submitted]
 
 permissions:
   contents: read
   pull-requests: read
+  checks: read
+
+concurrency:
+  group: clickup-sync-${{ github.repository }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
 
 jobs:
   dev-sync:
+    # Never execute fork code or expose the ClickUp secret to a fork workflow.
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     env:
       CLICKUP_API_KEY: ${{ secrets.CLICKUP_API_KEY }}
       CLICKUP_WORKSPACE_ID: ${{ secrets.CLICKUP_WORKSPACE_ID }}
+      # Set to the full 40-character commit SHA of a tested clickup-agent release.
+      CLICKUP_AGENT_REV: ${{ vars.CLICKUP_AGENT_REV }}
+      GH_TOKEN: ${{ github.token }}
       PR_BRANCH: ${{ github.event.pull_request.head.ref }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       PR_TITLE: ${{ github.event.pull_request.title }}
@@ -30,44 +35,59 @@ jobs:
     steps:
       - name: Skip when ClickUp token is unavailable
         if: ${{ env.CLICKUP_API_KEY == '' }}
-        run: |
-          echo "CLICKUP_API_KEY secret is not configured; skipping dev-sync."
-
-      - name: Check out repository
-        if: ${{ env.CLICKUP_API_KEY != '' }}
-        uses: actions/checkout@v4
+        run: echo "CLICKUP_API_KEY secret is not configured; skipping dev-sync."
 
       - name: Set up uv
         if: ${{ env.CLICKUP_API_KEY != '' }}
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
 
-      - name: Install clickup-agent
+      - name: Install pinned clickup-agent
         if: ${{ env.CLICKUP_API_KEY != '' }}
-        run: uv tool install git+https://github.com/zenzenzen/clickup-agentic-native.git --python 3.12 --reinstall
-
-      - name: Derive ClickUp task id from branch
-        if: ${{ env.CLICKUP_API_KEY != '' }}
-        id: task
         shell: bash
         run: |
           set -euo pipefail
+          if [[ ! "${CLICKUP_AGENT_REV}" =~ ^[a-fA-F0-9]{40}$ ]]; then
+            echo "Set CLICKUP_AGENT_REV to a tested full commit SHA." >&2
+            exit 2
+          fi
+          uv tool install "git+https://github.com/zenzenzen/clickup-agentic-native.git@${CLICKUP_AGENT_REV}" --python 3.12 --reinstall
+
+      - name: Configure and sync
+        if: ${{ env.CLICKUP_API_KEY != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${CLICKUP_API_KEY:-}" ]]; then
+            echo "ClickUp credential unavailable; skipping dev-sync."
+            exit 0
+          fi
+          task_args=()
           if [[ "${PR_BRANCH}" =~ (^|/)(86[[:alnum:]]{6,}|[A-Za-z][A-Za-z0-9]+-[0-9]+)([-_/]|$) ]]; then
-            printf 'task_id=%s\n' "${BASH_REMATCH[2]}" >> "${GITHUB_OUTPUT}"
+            task_id="${BASH_REMATCH[2]}"
+            if [[ "${task_id}" == *-* ]]; then
+              if [[ -z "${CLICKUP_WORKSPACE_ID:-}" ]]; then
+                echo "Custom task IDs require CLICKUP_WORKSPACE_ID." >&2
+                exit 2
+              fi
+              task_args+=(--custom-task-ids --team-id "${CLICKUP_WORKSPACE_ID}")
+            fi
           else
             echo "No ClickUp task id prefix found in branch; skipping dev-sync."
-            printf 'task_id=\n' >> "${GITHUB_OUTPUT}"
+            exit 0
           fi
-
-      - name: Sync GitHub PR state to ClickUp
-        if: ${{ env.CLICKUP_API_KEY != '' && steps.task.outputs.task_id != '' }}
-        run: |
+          # No checkout: only the pinned tool executes. Never source PR content.
+          config_file="${HOME}/.config/clickup-agent/.env"
+          if [[ -e "${config_file}" || -L "${config_file}" ]]; then
+            echo "Existing ClickUp config found; refusing to replace it in CI." >&2
+            exit 2
+          fi
+          # This job owns only the file it creates. Cleanup also runs on failure.
+          trap 'rm -f -- "${config_file}"' EXIT
+          umask 077
+          clickup-agent setup --non-interactive
           clickup-agent run dev-sync \
-            --live \
-            --mode github-to-clickup \
-            --task-id "${{ steps.task.outputs.task_id }}" \
-            --branch "${PR_BRANCH}" \
-            --latest-commit "${PR_SHA}" \
-            --pr-url "${PR_URL}" \
-            --pr-title "${PR_TITLE}" \
-            --pr-number "${PR_NUMBER}" \
-            --pr-state "${PR_STATE}"
+            --live --mode github-to-clickup --verify-github \
+            --task-id "${task_id}" "${task_args[@]}" \
+            --branch "${PR_BRANCH}" --latest-commit "${PR_SHA}" \
+            --pr-url "${PR_URL}" --pr-title "${PR_TITLE}" \
+            --pr-number "${PR_NUMBER}" --pr-state "${PR_STATE}"

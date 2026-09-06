@@ -6,7 +6,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from .evidence import GitHubEvidence
 from .markers import (
+    comment_text,
+    semantic_sync_text,
     comment_contains_url,
     find_status_comment,
     render_description_block,
@@ -54,6 +57,7 @@ class DevSyncInput:
     repo: GitRepositoryContext
     pr: GitHubPrContext
     task_updates: dict[str, Any]
+    evidence: GitHubEvidence | None = None
     comment: str | None = None
     pr_summary: bool = False
     checklist_name: str = DEVELOPMENT_SYNC_CHECKLIST
@@ -74,6 +78,8 @@ class DevSyncPlan:
     backlink_mode: str
     status_comment: dict[str, Any] | None
     status_comment_text: str
+    status_comment_needed: bool
+    evidence: dict[str, Any]
     description_block: str
     comment_texts: tuple[str, ...]
     checklist_name: str
@@ -81,11 +87,12 @@ class DevSyncPlan:
     duplicates_avoided: dict[str, bool]
 
     def to_response(self) -> dict[str, Any]:
-        status_action = "update" if self.status_comment else "create"
+        status_action = ("update" if self.status_comment else "create") if self.status_comment_needed else "unchanged"
         return {
             "task_id": self.task_id,
             "branch": self.branch,
             "pr_state": self.pr_state,
+            "evidence": self.evidence,
             "planned_updates": {
                 "task_fields": sorted(self.task_updates),
                 "backlink": None if not self.backlink_needed else self.backlink_mode,
@@ -123,6 +130,16 @@ def build_dev_sync_plan(inputs: DevSyncInput, context: ClickUpTaskContext) -> De
         comments.append(inputs.comment)
     if inputs.pr_summary and inputs.pr.url:
         comments.append(status_body)
+    rendered_status = render_status_comment(branch=branch, pr_number=inputs.pr.number, body=status_body)
+    status_needed = status_comment is None or semantic_sync_text(comment_text(status_comment)) != semantic_sync_text(rendered_status)
+    existing_texts = {comment_text(c) for c in context.comments if isinstance(c, dict)}
+    existing_summaries = {semantic_sync_text(text) for text in existing_texts}
+    unique_comments = []
+    for text in comments:
+        duplicate = text in existing_texts if text == inputs.comment else semantic_sync_text(text) in existing_summaries
+        if not duplicate and text not in unique_comments:
+            unique_comments.append(text)
+    comments = unique_comments
     return DevSyncPlan(
         task_id=inputs.task_id,
         branch=branch,
@@ -131,7 +148,9 @@ def build_dev_sync_plan(inputs: DevSyncInput, context: ClickUpTaskContext) -> De
         backlink_needed=backlink_needed,
         backlink_mode=inputs.backlink_mode,
         status_comment=status_comment,
-        status_comment_text=render_status_comment(branch=branch, pr_number=inputs.pr.number, body=status_body),
+        status_comment_text=rendered_status,
+        status_comment_needed=status_needed,
+        evidence=_evidence_summary(inputs),
         description_block=block,
         comment_texts=tuple(comments),
         checklist_name=inputs.checklist_name,
@@ -159,6 +178,9 @@ def _status_body(inputs: DevSyncInput, pr_state: str, latest_commit: str | None)
         f"Branch: {inputs.pr.branch or inputs.repo.branch or 'unknown'} -> {inputs.pr.base or 'unknown'}",
         f"PR: {inputs.pr.url or 'No PR exists for this branch yet.'}",
         f"Latest commit: {latest_commit or 'unknown'}",
+        f"Evidence: {inputs.evidence.source if inputs.evidence else 'unverified caller metadata'}",
+        f"Evidence SHA: {inputs.evidence.head_sha if inputs.evidence else 'unknown'}",
+        f"Verification: {_evidence_summary(inputs)['checks']}; review: {_evidence_summary(inputs)['review']}; push: {_evidence_summary(inputs)['push']}",
         f"Last sync: {inputs.last_sync}",
     ]
     if inputs.pr.title:
@@ -168,15 +190,16 @@ def _status_body(inputs: DevSyncInput, pr_state: str, latest_commit: str | None)
 
 def _checklist_items(inputs: DevSyncInput, pr_state: str, branch: str | None, latest_commit: str | None) -> list[dict[str, Any]]:
     resolved = {
-        "Branch pushed": bool(branch),
+        "Branch pushed": _evidence_value(inputs, "branch_pushed") is True,
         "PR opened": pr_state in {"open", "draft", "merged", "closed-without-merge"},
         "Latest commit recorded": bool(latest_commit),
-        "Lint/type checks passed": False,
-        "Review completed": pr_state == "merged",
+        "Lint/type checks passed": _evidence_value(inputs, "checks_passed") is True,
+        "Review completed": _evidence_value(inputs, "review_completed") is True,
         "Merged": pr_state == "merged",
     }
     for item in inputs.check_items:
-        resolved[item] = True
+        if item not in {"Branch pushed", "Lint/type checks passed", "Review completed"}:
+            resolved[item] = True
     names = [*CANONICAL_CHECKLIST_ITEMS]
     if pr_state == "no_pr":
         names.append("Open PR")
@@ -189,3 +212,19 @@ def _task_description(task: dict[str, Any]) -> str:
         str(task.get(key) or "")
         for key in ("description", "text_content", "markdown_description", "markdown_content")
     )
+
+
+def _evidence_value(inputs: DevSyncInput, name: str) -> bool | None:
+    if inputs.evidence is None or inputs.evidence.head_sha != inputs.repo.latest_commit:
+        return None
+    return getattr(inputs.evidence, name)
+
+
+def _evidence_summary(inputs: DevSyncInput) -> dict[str, Any]:
+    def label(name: str) -> str:
+        value = _evidence_value(inputs, name)
+        return "unknown" if value is None else ("verified" if value else "not_verified")
+    return {"source": inputs.evidence.source if inputs.evidence else None,
+            "sha": inputs.evidence.head_sha if inputs.evidence else None,
+            "observed_at": inputs.evidence.observed_at if inputs.evidence else None,
+            "push": label("branch_pushed"), "review": label("review_completed"), "checks": label("checks_passed")}

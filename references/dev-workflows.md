@@ -150,7 +150,8 @@ should be created.
 
 `examples/github-actions-dev-sync.yml` is a reference workflow for repositories
 that want PR events to update ClickUp automatically. Copy it into
-`.github/workflows/` and configure a `CLICKUP_API_KEY` repository secret.
+`.github/workflows/` and configure a `CLICKUP_API_KEY` repository secret plus a `CLICKUP_AGENT_REV`
+repository variable containing the full commit SHA of the tested tool revision.
 `CLICKUP_WORKSPACE_ID` is optional unless your task ids require it.
 
 The workflow runs on:
@@ -171,3 +172,15 @@ successfully when no task id can be found. It does not echo the ClickUp token.
 
 ClickUp-to-local webhooks are out of scope for a local CLI. Use `dev audit` as
 the reconciliation path for ClickUp-side drift.
+
+The example runs on GitHub-hosted runners, skips fork PRs and does not check out
+PR content. It installs a pinned tool, calls native `setup --non-interactive`,
+and removes the credential file on shell exit, including failure. An existing
+canonical file causes a refusal rather than replacement. Custom task IDs require
+`CLICKUP_WORKSPACE_ID`. The example still uses branch-name inference; explicit
+bindings and broader event reconciliation remain future work.
+
+The current example opts into `--verify-github`; choose a pinned revision with
+that flag. It verifies push/review evidence at the supplied PR SHA. Check names
+are workspace-specific: add repeated `--required-check` flags to verify lint/type
+checks. See [evidence-aware sync](evidence-sync.md) for limits.

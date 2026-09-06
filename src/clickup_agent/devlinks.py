@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from .markers import semantic_sync_text
+
 
 DevPrState = Literal["found", "not_found", "timeout", "gh_missing", "unauthenticated", "no_remote"]
 GITHUB_SYNC_START = "<!-- clickup-agent:dev-sync:start -->"
@@ -330,7 +332,14 @@ def write_pr_body_block(pr_url: str, block: str, *, timeout: float = 10.0) -> di
         current = json.loads(view.stdout)
     except json.JSONDecodeError as exc:
         raise RuntimeError("gh pr view returned invalid JSON.") from exc
-    updated = upsert_pr_body_block(str(current.get("body") or ""), block)
+    body = str(current.get("body") or "")
+    start = body.find(GITHUB_SYNC_START)
+    end = body.find(GITHUB_SYNC_END, start if start >= 0 else 0)
+    if start >= 0 and end >= 0:
+        existing = body[start:end + len(GITHUB_SYNC_END)]
+        if semantic_sync_text(existing) == semantic_sync_text(block):
+            return {"pr_url": pr_url, "updated": False}
+    updated = upsert_pr_body_block(body, block)
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=True) as handle:
         handle.write(updated)
         handle.flush()
