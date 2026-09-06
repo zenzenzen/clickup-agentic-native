@@ -1,0 +1,190 @@
+[
+  {
+    "id": "W01",
+    "category": "workflow",
+    "description": "Public artifact and tenant audit",
+    "acceptance": [
+      "Inspect current public files, locally available history and release artifacts; record redacted findings and remaining review gaps.",
+      "Distinguish synthetic fixtures from real tenant data and publish a sanitized remediation list."
+    ],
+    "status": "in_progress",
+    "evidence": "Scoped audit and package inspection passed; references/public-readiness.md. Full release exposure review remains.",
+    "blocked_by": []
+  },
+  {
+    "id": "W02",
+    "category": "workflow",
+    "description": "Fresh-runner credential setup",
+    "acceptance": [
+      "In a clean runner environment, native setup makes credentials available to the runtime without logging them.",
+      "Remove the job-owned credential file after success or failure; preserve an existing file.",
+      "Require an immutable tool revision and skip missing secrets and fork PRs."
+    ],
+    "status": "verified",
+    "evidence": "2026-09-06: 7 exact workflow-shell tests with native setup/config and stubbed remote writes passed; hosted runner/live integration not tested.",
+    "blocked_by": []
+  },
+  {
+    "id": "W03",
+    "category": "workflow",
+    "description": "Evidence-correct sync",
+    "acceptance": [
+      "A branch name or merged state alone cannot certify push, checks or review.",
+      "Fetched evidence identifies its source and full commit SHA; stale or ambiguous evidence does not pass.",
+      "Repeating unchanged managed sync produces no writes and preserves human content."
+    ],
+    "status": "verified",
+    "evidence": "2026-09-06: SHA-specific evidence, default managed replay, CLI/MCP parity, 152 passing suite tests (1 skipped), public PR read-only smoke. Hosted/live ClickUp and W05 concurrency remain unverified.",
+    "blocked_by": []
+  },
+  {
+    "id": "W04",
+    "category": "workflow",
+    "description": "Explicit binding and neutral configuration",
+    "acceptance": [
+      "Resolve native IDs, custom IDs and task URLs to explicit bindings; reject conflicting references.",
+      "Support configurable branch conventions without a fixed native-ID prefix.",
+      "An empty status map disables status writes."
+    ],
+    "status": "not_started",
+    "evidence": null,
+    "blocked_by": [
+      "W03"
+    ]
+  },
+  {
+    "id": "W05",
+    "category": "workflow",
+    "description": "Durable reconciliation",
+    "acceptance": [
+      "Repeated events produce one managed result and conflicting human edits are surfaced.",
+      "Resume only unapplied operations after interruption across providers.",
+      "Resolve uncertain create results before retrying or stop with an indeterminate result."
+    ],
+    "status": "not_started",
+    "evidence": null,
+    "blocked_by": [
+      "W02",
+      "W04"
+    ]
+  },
+  {
+    "id": "W06",
+    "category": "workflow",
+    "description": "Disposable live release demo",
+    "acceptance": [
+      "Demonstrate a disposable task/PR round trip with fresh installation, CLI/MCP parity and repeated no-op sync.",
+      "Publish observed limits and complete the public artifact review for the release revision."
+    ],
+    "status": "not_started",
+    "evidence": null,
+    "blocked_by": [
+      "W01",
+      "W05"
+    ]
+  },
+  {
+    "id": "W07",
+    "category": "workflow",
+    "description": "Ticket draft and creation",
+    "acceptance": [
+      "Draft tasks from briefs, issues or PRs with source provenance and explicit missing intent.",
+      "Preview the destination and avoid duplicate task creation on repeated requests."
+    ],
+    "status": "not_started",
+    "evidence": null,
+    "blocked_by": [
+      "W04",
+      "W05"
+    ]
+  },
+  {
+    "id": "W08",
+    "category": "workflow",
+    "description": "Readiness and staged plan",
+    "acceptance": [
+      "Incomplete tickets produce specific readiness gaps and do not launch execution.",
+      "Every acceptance criterion maps to a stage and verification method.",
+      "Reject dependency cycles and conflicting write ownership; record revision invalidation rules."
+    ],
+    "status": "not_started",
+    "evidence": null,
+    "blocked_by": [
+      "W07"
+    ]
+  },
+  {
+    "id": "W09",
+    "category": "workflow",
+    "description": "Portable skill",
+    "acceptance": [
+      "Install the skill outside the maintainer workspace without absolute local paths.",
+      "Discover supported commands and handle ready/incomplete tickets, branch-first workflows and conflicts.",
+      "Never present planned commands as implemented."
+    ],
+    "status": "not_started",
+    "evidence": null,
+    "blocked_by": [
+      "W08"
+    ]
+  },
+  {
+    "id": "W10",
+    "category": "workflow",
+    "description": "Serial executor pilot",
+    "acceptance": [
+      "Execute a bounded task in an isolated worktree with declared permissions, lease and attempt budget.",
+      "Cancel and resume from recorded state; evidence identifies the resulting SHA.",
+      "Do not merge or deploy without configured authority."
+    ],
+    "status": "not_started",
+    "evidence": null,
+    "blocked_by": [
+      "W08",
+      "W09"
+    ]
+  },
+  {
+    "id": "W11",
+    "category": "workflow",
+    "description": "Independent review and integration",
+    "acceptance": [
+      "Provide required artifacts to an independent reviewer and reverify integrated code.",
+      "Failed criteria prevent completion; changed scope replans affected stages."
+    ],
+    "status": "not_started",
+    "evidence": null,
+    "blocked_by": [
+      "W10"
+    ]
+  },
+  {
+    "id": "W12",
+    "category": "workflow",
+    "description": "Event-driven reconciliation",
+    "acceptance": [
+      "Reconcile relevant PR, review and check events plus missed events through periodic repair.",
+      "Handle duplicate/out-of-order delivery, permissions failures, bursts and rate limits."
+    ],
+    "status": "not_started",
+    "evidence": null,
+    "blocked_by": [
+      "W06"
+    ]
+  },
+  {
+    "id": "W13",
+    "category": "workflow",
+    "description": "Second-provider proof",
+    "acceptance": [
+      "Use a real second tracker with the same readiness, binding and sync contracts.",
+      "Pass adapter conformance before extracting additional shared packaging."
+    ],
+    "status": "not_started",
+    "evidence": null,
+    "blocked_by": [
+      "W09",
+      "W11"
+    ]
+  }
+]

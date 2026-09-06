@@ -38,6 +38,7 @@ out/
 
 # Local planning, context, and handoff artifacts — never commit (this repo is public).
 /plans/
+/.icm/
 /context/
 *.plan.md
 *.handoff.md

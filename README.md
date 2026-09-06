@@ -1,8 +1,29 @@
 # clickup-agentic-native
 
-`clickup-agentic-native` is a home for building a super agentic, native way to access and use ClickUp tooling.
+`clickup-agentic-native` builds `clickup-agent`: a local, dry-run-first
+ClickUp CLI and MCP server for agents working from a terminal, Codex, Cursor,
+or another MCP-capable client.
 
-The command name for the project will be `clickup-agent`.
+It is an independent integration, not an official ClickUp product. Its job is
+to make ClickUp behave like a native operational layer beside development work:
+agents can inspect tasks, run generated ClickUp V2 operations, use safer
+curated wrappers, sync GitHub PR context, maintain work and decision logs, and
+load compact handoff context without forcing the operator out of their normal
+workflow.
+
+The command name for the project is `clickup-agent`.
+
+## What It Does Today
+
+- Exposes a generated ClickUp V2 operation catalog through `clickup-agent run`
+  and MCP, with dry-run previews as the default for write workflows.
+- Provides curated wrappers for common task, status, comment, checklist,
+  assignment, due-date, tag, timer, hierarchy, and search workflows.
+- Supports operational catch-up movesets for GitHub PR development sync,
+  action-item and verification checklists, append-only decision comments, and
+  compact handoff context loading.
+- Connects local LLM clients to ClickUp through `clickup-agent mcp` while
+  keeping real API keys in `$HOME/.config/clickup-agent/.env`.
 
 ## Quickstart
 
@@ -27,9 +48,14 @@ This project is based on interfacing with ClickUp, the work management platform 
 
 ## Vision
 
-This project exists to make ClickUp feel like a native operational layer for my company workflow, not a separate place I have to manually visit and maintain.
+This project exists to make ClickUp feel like a native operational layer for an
+operator's company workflow, not a separate place they have to manually visit
+and maintain.
 
-The goal is an agent that can understand work context, resolve ClickUp entities, compose safe toolchains, and help me create, update, search, comment on, organize, and review ClickUp work from the places where I already operate.
+The goal is an agent that can understand work context, resolve ClickUp
+entities, compose safe toolchains, and help create, update, search, comment on,
+organize, and review ClickUp work from the places where the operator already
+works.
 
 For implementation and agent handoffs, read `CONTEXT.md` for the repo-local product context and `UBIQUITOUS_LANGUAGE.md` for canonical terms around curated wrappers, generated operations, checklists, statuses, and markdown descriptions.
 
