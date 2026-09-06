@@ -76,14 +76,14 @@ def find_status_comment(comments: list[Any]) -> dict[str, Any] | None:
     for comment in comments:
         if not isinstance(comment, dict):
             continue
-        text = _comment_text(comment)
+        text = comment_text(comment)
         if text.startswith(STATUS_COMMENT_PREFIX):
             return comment
     return None
 
 
 def comment_contains_url(comment: Any, url: str) -> bool:
-    return isinstance(comment, dict) and url in _comment_text(comment)
+    return isinstance(comment, dict) and url in comment_text(comment)
 
 
 def has_pr_backlink(description: str | None, comments: list[Any], pr_url: str | None) -> bool:
@@ -129,12 +129,21 @@ def _decision_title(decision: str) -> str:
     return cleaned[:69].rstrip() + "..."
 
 
-def _comment_text(comment: dict[str, Any]) -> str:
+def comment_text(comment: dict[str, Any]) -> str:
     for key in ("comment_text", "text", "comment"):
         value = comment.get(key)
         if isinstance(value, str):
             return value
+    fragments = comment.get("comment")
+    if isinstance(fragments, list):
+        return "".join(str(part.get("text") or "") for part in fragments if isinstance(part, dict))
     return ""
+
+
+def semantic_sync_text(text: str) -> str:
+    """Ignore only generated clock lines when comparing managed sync content."""
+    return "\n".join(line for line in text.strip().splitlines()
+                     if not line.startswith(("Last sync: ", "- Last sync: ")))
 
 
 def description_block_survives(task_id: str) -> bool:

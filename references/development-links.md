@@ -66,3 +66,5 @@ Managed status comments begin with `[dev-sync] GitHub development state`.
 - Never expose tokens from `gh`, env files, or MCP config.
 - If the repo has no GitHub remote or `gh` is unauthenticated, report that PR discovery is unavailable.
 - ClickUp-side markers are visible text, not HTML comments.
+
+For SHA-specific push, review and check verification, see [evidence-aware sync](evidence-sync.md).

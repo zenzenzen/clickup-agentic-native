@@ -678,6 +678,8 @@ def create_server() -> FastMCP:
     @server.tool()
     def clickup_agent_dev_sync(
         task_id: str,
+        verify_github: bool | None = None,
+        required_checks: list[str] | None = None,
         repo: str | None = None,
         mode: str | None = None,
         branch: str | None = None,
@@ -710,6 +712,8 @@ def create_server() -> FastMCP:
             "dev-sync",
             _payload_without_none(
                 task_id=task_id,
+                verify_github=verify_github,
+                required_checks=required_checks,
                 repo=repo,
                 mode=mode,
                 branch=branch,

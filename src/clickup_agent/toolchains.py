@@ -26,6 +26,7 @@ from .devsync import (
 )
 from .discovery import CURATED_WRAPPERS_BY_NAME
 from .markers import upsert_description_block
+from .evidence import inspect_pr_evidence
 from .markers import render_decision_comment
 from .registry import ToolCatalog, ToolOperation, load_catalog, normalize_tool_name
 from .requests import OperationInputError, OperationRequest, build_operation_request
@@ -1731,7 +1732,20 @@ def _run_dev_sync(options: RunOptions, catalog: ToolCatalog, client: ClickUpClie
     pr_title_prefix = payload.pop("pr_title_prefix", None)
     if mode in {"clickup-to-github", "bidirectional"} and not payload.get("pr_url"):
         raise ToolchainError("clickup-to-github requires --pr-url from dev pr or an explicit PR URL")
+    verify_github = _bool(payload.pop("verify_github"), field="verify_github") if "verify_github" in payload else False
+    required_checks = tuple(str(v) for v in _csv_or_list(payload.pop("required_checks", [])))
     inputs = _dev_sync_input(task_id, payload)
+    if required_checks and not verify_github:
+        raise ToolchainError("--required-check requires --verify-github")
+    if verify_github:
+        if not inputs.pr.url or not inputs.repo.latest_commit:
+            raise ToolchainError("--verify-github requires --pr-url and --latest-commit")
+        try:
+            evidence = inspect_pr_evidence(inputs.pr.url, expected_sha=inputs.repo.latest_commit,
+                                           branch=inputs.pr.branch or inputs.repo.branch, required_checks=required_checks)
+        except (RuntimeError, ValueError, TypeError, AttributeError, KeyError) as exc:
+            raise ToolchainError(f"Could not verify GitHub evidence: {exc}") from exc
+        inputs = replace(inputs, evidence=evidence)
 
     operations: list[dict[str, Any]] = []
     task_operation, task_response = _execute_operation(catalog, "GetTask", task_lookup_payload, dry_run=options.dry_run, client=client)
@@ -1753,11 +1767,13 @@ def _run_dev_sync(options: RunOptions, catalog: ToolCatalog, client: ClickUpClie
     apply_clickup = mode in {"github-to-clickup", "bidirectional"}
     apply_github = mode in {"clickup-to-github", "bidirectional"}
 
-    if apply_clickup and plan.task_updates:
+    task_updates = {key: value for key, value in plan.task_updates.items()
+                    if task_context.task.get(key) != value}
+    if apply_clickup and task_updates:
         operation, _ = _execute_operation(
             catalog,
             "UpdateTask",
-            {**base_payload, "body": plan.task_updates},
+            {**base_payload, "body": task_updates},
             dry_run=options.dry_run,
             client=client,
         )
@@ -1795,7 +1811,7 @@ def _run_dev_sync(options: RunOptions, catalog: ToolCatalog, client: ClickUpClie
             )
             operations.append(operation)
 
-    if apply_clickup and plan.status_comment is not None and plan.status_comment.get("id") is not None:
+    if apply_clickup and plan.status_comment_needed and plan.status_comment is not None and plan.status_comment.get("id") is not None:
         operation, _ = _execute_operation(
             catalog,
             "UpdateComment",
@@ -1811,7 +1827,7 @@ def _run_dev_sync(options: RunOptions, catalog: ToolCatalog, client: ClickUpClie
             client=client,
         )
         operations.append(operation)
-    elif apply_clickup:
+    elif apply_clickup and plan.status_comment_needed:
         operation, _ = _execute_operation(
             catalog,
             "CreateTaskComment",
@@ -1866,6 +1882,8 @@ def _run_dev_sync(options: RunOptions, catalog: ToolCatalog, client: ClickUpClie
 
 
 def _configure_dev_sync(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--verify-github", action="store_true", default=None)
+    parser.add_argument("--required-check", dest="required_checks", action="append")
     parser.add_argument("--task-id", required=False)
     parser.add_argument("--mode", choices=["github-to-clickup", "clickup-to-github", "bidirectional"], default=None)
     parser.add_argument("--repo")
